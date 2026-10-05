@@ -38,7 +38,22 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Build Windows installer
-        run: npm run dist:win
+        shell: pwsh
+        run: |
+          npm run dist:win 2>&1 | Tee-Object -FilePath build-results.txt
+          $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -ne 0) {
+            Get-Content build-results.txt | Select-String -Pattern 'ERR|error|Error|failed|ENOENT|Cannot|Exception|not found' | Select-Object -Last 25 | ForEach-Object { Write-Output "::error title=Windows packaging failure::$($_.Line)" }
+            exit $buildExitCode
+          }
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Localis-build-log
+          path: build-results.txt
+          if-no-files-found: warn
+          retention-days: 7
       - name: Upload installer
         uses: actions/upload-artifact@v7
         with:
