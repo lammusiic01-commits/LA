@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d131c">
+  <title>Localis · локальный AI-агент</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="brand-copy"><strong>localis</strong><small>LOCAL AI WORKSPACE</small></div>
+        <button class="icon-button collapse-button" id="sidebar-close" title="Свернуть меню" aria-label="Свернуть меню">×</button>
+      </div>
+      <button class="new-chat-button" id="new-chat"><span class="plus-icon">＋</span><span>Новый диалог</span><kbd>Ctrl K</kbd></button>
+      <div class="sidebar-search"><span class="search-glyph">⌕</span><input id="chat-search" placeholder="Найти диалог" aria-label="Найти диалог"><kbd>⌘</kbd></div>
+      <div class="sidebar-label"><span>ИСТОРИЯ</span><button id="history-sort" title="Сначала новые">•••</button></div>
+      <nav class="conversation-list" id="conversation-list" aria-label="История диалогов"></nav>
+      <div class="sidebar-spacer"></div>
+      <div class="workspace-card">
+        <div class="workspace-icon">▧</div>
+        <div class="workspace-copy"><strong>Рабочая папка</strong><span id="workspace-label">Локальное пространство</span></div>
+        <button class="mini-icon-button" id="open-workspace" title="Открыть рабочую папку" aria-label="Открыть рабочую папку">↗</button>
+      </div>
+      <div class="sidebar-bottom">
+        <button class="sidebar-nav-button" id="memory-button"><span class="sidebar-nav-icon">✧</span><span>Локальная память</span><span class="memory-count" id="memory-count">0</span></button>
+        <div class="local-note"><span class="local-indicator"></span><span>Данные остаются на устройстве</span></div>
+        <button class="user-profile" id="settings-open">
+          <span class="avatar">L</span><span class="profile-copy"><strong>Локальный агент</strong><small>Ollama · на этом ПК</small></span><span class="profile-more">•••</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div class="topbar-left"><button class="icon-button menu-button" id="sidebar-open" aria-label="Открыть меню">☰</button><div class="crumb"><span>Рабочее пространство</span><span class="crumb-slash">/</span><strong id="active-title">Новый диалог</strong></div></div>
+        <div class="topbar-actions">
+          <button class="connection-pill" id="connection-pill" title="Проверить подключение к Ollama"><span class="connection-dot"></span><span id="connection-label">Проверка Ollama…</span><span class="pill-chevron">⌄</span></button>
+          <div class="model-select-wrap"><span class="model-spark">✦</span><select id="model-select" aria-label="Выбрать модель"><option value="">Модель не найдена</option></select><span class="select-chevron">⌄</span></div>
+          <button class="top-action" id="browser-open" title="Открыть встроенный браузер"><span>◎</span><span>Браузер</span></button>
+          <button class="icon-button settings-icon" id="settings-open-top" title="Настройки" aria-label="Настройки">⚙</button>
+        </div>
+      </header>
+
+      <section class="conversation-stage" id="conversation-stage">
+        <div class="welcome" id="welcome-screen">
+          <div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div>
+          <div class="welcome-emblem"><div class="emblem-core">L</div><span class="emblem-ray ray-a"></span><span class="emblem-ray ray-b"></span><span class="emblem-ray ray-c"></span></div>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> ВАШ ЛОКАЛЬНЫЙ AI-ПОМОЩНИК</div>
+          <h1>С чего начнём?</h1>
+          <p class="welcome-subtitle">Задача остаётся на вашем компьютере. Localis подключит модель Ollama к браузеру и инструментам — с подтверждением каждого действия.</p>
+          <div class="suggestion-grid">
+            <button class="suggestion-card" data-prompt="Изучи актуальные решения для моей задачи и дай ответ со ссылками на источники."><span class="suggestion-icon violet">⌕</span><span><strong>Исследовать тему</strong><small>Поиск в интернете с источниками</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Создай небольшой сайт-портфолио с адаптивным дизайном. Сначала предложи структуру, затем создай файлы в рабочей папке."><span class="suggestion-icon blue">⌘</span><span><strong>Создать приложение</strong><small>Код, файлы и локальная сборка</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Помоги подготовить аккуратный документ DOCX с планом проекта на месяц."><span class="suggestion-icon mint">▤</span><span><strong>Собрать документ</strong><small>DOCX, PDF, Excel и презентации</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Какие локальные сервисы нужны, чтобы генерировать изображения и собирать из них MP4? Проверь конфигурацию перед генерацией."><span class="suggestion-icon amber">✦</span><span><strong>Создать медиа</strong><small>Локальная генерация и видео из кадров</small></span><span class="suggestion-arrow">↗</span></button>
+          </div>
+          <div class="capability-line"><span>ЛОКАЛЬНАЯ МОДЕЛЬ</span><i></i><span>ВАШИ ФАЙЛЫ</span><i></i><span>ПРОВЕРЯЕМЫЕ ИНСТРУМЕНТЫ</span></div>
+        </div>
+        <div class="message-list" id="message-list" aria-live="polite"></div>
+        <div class="scroll-anchor" id="scroll-anchor"></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <div class="attachment-strip" id="attachment-strip" hidden></div>
+        <div class="composer" id="composer">
+          <textarea id="prompt-input" rows="1" placeholder="Напишите задачу…" aria-label="Сообщение"></textarea>
+          <div class="composer-bottom">
+            <div class="composer-tools">
+              <button class="composer-tool" id="attach-button" title="Прикрепить изображение или текстовый файл"><span class="attach-plus">＋</span><span>Вложить</span></button>
+              <span class="composer-divider"></span>
+              <span class="privacy-label"><span class="privacy-lock">⌑</span> Локально по умолчанию</span>
+            </div>
+            <div class="composer-right"><span class="enter-hint">Enter · отправить</span><button class="send-button" id="send-button" aria-label="Отправить сообщение" title="Отправить"><span class="send-arrow">↑</span></button></div>
+          </div>
+        </div>
+        <div class="composer-footnote">Localis — интерфейс и инструменты поверх Ollama. Веб-запросы отправляются в интернет только после вашего подтверждения.</div>
+      </footer>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="approval-backdrop" hidden>
+    <section class="modal approval-modal" role="dialog" aria-modal="true" aria-labelledby="approval-title">
+      <div class="modal-topline"><div class="modal-icon approval-icon" id="approval-icon">!</div><button class="icon-button modal-close" id="approval-close" aria-label="Закрыть">×</button></div>
+      <div class="approval-label" id="approval-kind">ТРЕБУЕТСЯ ПОДТВЕРЖДЕНИЕ</div>
+      <h2 id="approval-title">Разрешить действие?</h2>
+      <p class="modal-description" id="approval-summary"></p>
+      <div class="approval-detail-label">ПОДРОБНОСТИ</div><pre class="approval-detail" id="approval-detail"></pre>
+      <div class="approval-warning" id="approval-warning" hidden><span>!</span><p></p></div>
+      <div class="modal-actions"><button class="button-secondary" id="approval-deny">Отклонить</button><button class="button-primary" id="approval-accept">Разрешить один раз <span>→</span></button></div>
+      <div class="approval-caption">Подтверждение действует только для этого действия. Автоматический доступ не включён.</div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="settings-backdrop" hidden>
+    <section class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="modal-topline"><div class="modal-icon settings-modal-icon">⚙</div><button class="icon-button modal-close" id="settings-close" aria-label="Закрыть">×</button></div>
+      <div class="settings-heading"><div><div class="approval-label">НАСТРОЙКИ ЛОКАЛЬНОГО РАБОЧЕГО ПРОСТРАНСТВА</div><h2 id="settings-title">Подключения и данные</h2></div></div>
+      <div class="settings-body">
+        <label class="field-label" for="ollama-url">Сервер Ollama <span>локально по умолчанию</span></label>
+        <div class="field-with-action"><input id="ollama-url" type="url" spellcheck="false" placeholder="http://127.0.0.1:11434"><button class="button-secondary compact" id="test-ollama">Проверить</button></div>
+        <div class="field-help" id="ollama-result">Совместим с локальным Ollama API. Если указать удалённый сервер, переписка будет отправляться туда.</div>
+
+        <label class="field-label" for="image-provider">Локальный генератор изображений <span>необязательно</span></label>
+        <div class="settings-grid"><select id="image-provider"><option value="automatic1111">AUTOMATIC1111 / Forge API</option><option value="comfyui">ComfyUI API</option></select><input id="image-endpoint" type="url" spellcheck="false" placeholder="http://127.0.0.1:7860"></div>
+        <div class="field-help">Сервис должен быть запущен на этом компьютере. Для AUTOMATIC1111 нужен параметр запуска <code>--api</code>; ComfyUI обычно слушает порт 8188.</div>
+
+        <label class="field-label">Рабочая папка <span>единственное место для файлов агента</span></label>
+        <div class="field-with-action"><div class="workspace-path" id="settings-workspace">…</div><button class="button-secondary compact" id="choose-workspace">Выбрать</button></div>
+        <div class="field-help">Файловые инструменты не читают и не записывают за пределами этой папки. Выбранный проект можно собирать командами после отдельного подтверждения.</div>
+
+        <div class="settings-section-divider"></div>
+        <div class="memory-settings-row"><div><strong>Локальная память</strong><p id="memory-description">Сохранённые заметки доступны только этому приложению и компьютеру. Это память-контекст, а не дообучение модели.</p></div><button class="button-danger" id="clear-memory">Очистить</button></div>
+        <div class="settings-privacy"><span>◈</span><div><strong>Без облачного аккаунта и API-ключа</strong><p>Чат хранится в профиле приложения. Интернет нужен только для веб-поиска, просмотра сайтов и по вашему подтверждению.</p></div></div>
+      </div>
+      <div class="modal-actions settings-actions"><button class="button-secondary" id="settings-cancel">Отмена</button><button class="button-primary" id="settings-save">Сохранить настройки <span>→</span></button></div>
+    </section>
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="renderer.js"></script>
+</body>
+</html>

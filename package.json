@@ -1,0 +1,63 @@
+{
+  "name": "localis-ai-desktop",
+  "version": "1.0.0",
+  "description": "Локальный desktop AI-агент поверх Ollama: браузер, инструменты и рабочая папка пользователя.",
+  "main": "src/main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist:win": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "docx": "^9.5.1",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.17.2",
+    "pptxgenjs": "^3.12.0"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "ai.localis.desktop",
+    "productName": "Localis",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "README.md",
+      "LICENSE",
+      "!src/**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "overrides": {
+    "image-size": "^2.0.4",
+    "uuid": "^11.1.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
