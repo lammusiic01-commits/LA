@@ -3,7 +3,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { safeExistingPath, safeWriteTarget } = require('./files');
+const { realWorkspace, safeExistingPath, safeWriteTarget } = require('./files');
 const { normalizeLocalServiceUrl } = require('./security');
 
 function wait(ms, signal) {
@@ -59,10 +59,11 @@ function clampDimension(value, fallback) {
 }
 
 async function saveGeneratedImage(workspaceRoot, imageBuffer, filename) {
+  const root = await realWorkspace(workspaceRoot);
   const relativePath = `artifacts/images/${safeImageName(filename)}.png`;
-  const target = await safeWriteTarget(workspaceRoot, relativePath);
+  const target = await safeWriteTarget(root, relativePath);
   await fs.writeFile(target, imageBuffer, { flag: 'w' });
-  return { path: path.relative(workspaceRoot, target).split(path.sep).join('/'), size: imageBuffer.length };
+  return { path: path.relative(root, target).split(path.sep).join('/'), size: imageBuffer.length };
 }
 
 async function generateWithAutomatic1111(workspaceRoot, endpoint, args, signal) {
@@ -144,10 +145,11 @@ async function generateWithComfyUI(workspaceRoot, endpoint, args, signal) {
   const imageResponse = await localFetch(endpoint, viewUrl.pathname + viewUrl.search, { timeoutMs: 30_000, signal });
   const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
   const ext = path.extname(imageInfo.filename).toLowerCase() || '.png';
+  const root = await realWorkspace(workspaceRoot);
   const relative = `artifacts/images/${safeImageName(args.filename)}${ext}`;
-  const target = await safeWriteTarget(workspaceRoot, relative);
+  const target = await safeWriteTarget(root, relative);
   await fs.writeFile(target, imageBuffer, { flag: 'w' });
-  return { path: path.relative(workspaceRoot, target).split(path.sep).join('/'), size: imageBuffer.length };
+  return { path: path.relative(root, target).split(path.sep).join('/'), size: imageBuffer.length };
 }
 
 async function generateImage(workspaceRoot, config, args, signal) {
@@ -207,9 +209,10 @@ async function makeVideo(workspaceRoot, args, signal) {
   const relativeImages = Array.isArray(args.image_paths) ? args.image_paths.slice(0, 24) : [];
   if (!relativeImages.length) throw new Error('Нужен хотя бы один путь к изображению из рабочей папки.');
   const requestedDuration = Math.min(30, Math.max(1, Number(args.seconds_per_image) || 4));
+  const root = await realWorkspace(workspaceRoot);
   const inputs = [];
   for (const relative of relativeImages) {
-    const imagePath = await safeExistingPath(workspaceRoot, String(relative));
+    const imagePath = await safeExistingPath(root, String(relative));
     const stat = await fs.stat(imagePath);
     if (!stat.isFile() || stat.size > 40 * 1024 * 1024) throw new Error(`Изображение недоступно или слишком большое: ${relative}`);
     if (!/\.(png|jpe?g|webp|bmp)$/i.test(imagePath)) throw new Error(`Неподдерживаемый формат кадра: ${relative}`);
@@ -218,7 +221,7 @@ async function makeVideo(workspaceRoot, args, signal) {
   const duration = Math.min(requestedDuration, Math.max(1, 180 / inputs.length));
   let output = String(args.output || 'artifacts/video/slideshow.mp4').trim();
   if (!/\.mp4$/i.test(output)) output += '.mp4';
-  const outputPath = await safeWriteTarget(workspaceRoot, output);
+  const outputPath = await safeWriteTarget(root, output);
   const filterParts = inputs.map((_, index) =>
     `[${index}:v]trim=duration=${duration},setpts=PTS-STARTPTS,fps=30,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[v${index}]`);
   const concatInputs = inputs.map((_, index) => `[v${index}]`).join('');
@@ -232,7 +235,7 @@ async function makeVideo(workspaceRoot, args, signal) {
   );
   const result = await runProcess('ffmpeg', commandArgs, { cwd: workspaceRoot, timeoutMs: 5 * 60_000, signal });
   const stat = await fs.stat(outputPath);
-  return { path: path.relative(workspaceRoot, outputPath).split(path.sep).join('/'), size: stat.size, frames: inputs.length, seconds: inputs.length * duration, log: result.output.slice(-1500) };
+  return { path: path.relative(root, outputPath).split(path.sep).join('/'), size: stat.size, frames: inputs.length, seconds: inputs.length * duration, log: result.output.slice(-1500) };
 }
 
 module.exports = { generateImage, makeVideo, runProcess };

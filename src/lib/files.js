@@ -90,21 +90,24 @@ async function writeWorkspaceFile(workspaceRoot, relativePath, content) {
   if (typeof content !== 'string') throw new Error('Содержимое файла должно быть текстом.');
   const buffer = Buffer.from(content, 'utf8');
   if (buffer.byteLength > MAX_TEXT_BYTES) throw new Error('Текстовый файл больше лимита 2 МБ.');
-  const filePath = await safeWriteTarget(workspaceRoot, relativePath);
+  const root = await realWorkspace(workspaceRoot);
+  const filePath = await safeWriteTarget(root, relativePath);
   await fs.writeFile(filePath, buffer, { flag: 'w' });
-  return { path: path.relative(workspaceRoot, filePath).split(path.sep).join('/'), size: buffer.byteLength };
+  return { path: path.relative(root, filePath).split(path.sep).join('/'), size: buffer.byteLength };
 }
 
 async function writeWorkspaceBuffer(workspaceRoot, relativePath, buffer) {
   if (!Buffer.isBuffer(buffer)) buffer = Buffer.from(buffer);
   if (buffer.byteLength > 100 * 1024 * 1024) throw new Error('Бинарный файл больше лимита 100 МБ.');
-  const filePath = await safeWriteTarget(workspaceRoot, relativePath);
+  const root = await realWorkspace(workspaceRoot);
+  const filePath = await safeWriteTarget(root, relativePath);
   await fs.writeFile(filePath, buffer, { flag: 'w' });
-  return { path: path.relative(workspaceRoot, filePath).split(path.sep).join('/'), size: buffer.byteLength };
+  return { path: path.relative(root, filePath).split(path.sep).join('/'), size: buffer.byteLength };
 }
 
 module.exports = {
   listWorkspaceFiles,
+  realWorkspace,
   readWorkspaceFile,
   safeExistingPath,
   safeWriteTarget,

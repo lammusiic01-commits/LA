@@ -6,7 +6,7 @@ const { Paragraph, TextRun, Document, HeadingLevel, Packer } = require('docx');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 const pptxgen = require('pptxgenjs');
-const { safeWriteTarget } = require('./files');
+const { realWorkspace, safeWriteTarget } = require('./files');
 
 function cleanText(value, max = 100_000) {
   return String(value || '').slice(0, max);
@@ -154,9 +154,10 @@ async function createDocument(workspaceRoot, args) {
   else if (format === 'xlsx') buffer = await createXlsx(input);
   else buffer = await createPptx(input);
 
-  const target = await safeWriteTarget(workspaceRoot, relativePath);
+  const root = await realWorkspace(workspaceRoot);
+  const target = await safeWriteTarget(root, relativePath);
   await fs.writeFile(target, buffer, { flag: 'w' });
-  return { path: path.relative(workspaceRoot, target).split(path.sep).join('/'), size: buffer.byteLength, format };
+  return { path: path.relative(root, target).split(path.sep).join('/'), size: buffer.byteLength, format };
 }
 
 module.exports = { createDocument };
