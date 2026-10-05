@@ -24,7 +24,11 @@ jobs:
         shell: pwsh
         run: |
           npm test 2>&1 | Tee-Object -FilePath test-results.txt
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+            Get-Content test-results.txt | Select-String -Pattern 'not ok|AssertionError|Error:|ERR_|failed|expected|actual' | Select-Object -First 20 | ForEach-Object { Write-Output "::error title=Windows test failure::$($_.Line)" }
+            exit $testExitCode
+          }
       - name: Upload test log
         if: always()
         uses: actions/upload-artifact@v7
