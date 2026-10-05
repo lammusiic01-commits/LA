@@ -43,7 +43,8 @@ jobs:
           npm run dist:win 2>&1 | Tee-Object -FilePath build-results.txt
           $buildExitCode = $LASTEXITCODE
           if ($buildExitCode -ne 0) {
-            Get-Content build-results.txt | Select-String -Pattern 'ERR|error|Error|failed|ENOENT|Cannot|Exception|not found' | Select-Object -Last 25 | ForEach-Object { Write-Output "::error title=Windows packaging failure::$($_.Line)" }
+            $details = (Get-Content build-results.txt | Select-Object -Last 35) -join ' | '
+            Write-Output "::error title=Windows packaging failure::$details"
             exit $buildExitCode
           }
       - name: Upload build log
