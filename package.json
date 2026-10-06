@@ -8,8 +8,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test",
-    "dist:win": "electron-builder --win nsis",
-    "dist:portable": "electron-builder --win portable"
+    "dist:win": "electron-builder --win nsis --publish never",
+    "dist:portable": "electron-builder --win portable --publish never"
   },
   "dependencies": {
     "docx": "^9.5.1",
