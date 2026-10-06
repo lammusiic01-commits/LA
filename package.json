@@ -1,6 +1,6 @@
 {
   "name": "localis-ai-desktop",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Localis with one bundled local AI model, LamV1.0, plus desktop tools and workspace.",
   "author": "Localis contributors",
   "main": "src/main.js",

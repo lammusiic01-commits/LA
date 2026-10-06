@@ -46,3 +46,13 @@ test('configuration clamps invalid temperature and falls back to allowed enumera
   assert.equal(config.uiLanguage, 'ru');
   assert.equal(config.approvalMode, 'ask');
 });
+
+test('configuration drops obsolete cloud-model API settings and leaves LamV1.0 as the only backend', () => {
+  const config = validateConfig({
+    model: 'openai/gpt-4', cloudFallbackEnabled: true, fallbackProvider: 'openai', providerApiKeys: { openai: 'secret' },
+  }, '/tmp/documents');
+  assert.equal(config.model, 'lam-v1.0');
+  assert.equal(Object.hasOwn(config, 'cloudFallbackEnabled'), false);
+  assert.equal(Object.hasOwn(config, 'fallbackProvider'), false);
+  assert.equal(Object.hasOwn(config, 'providerApiKeys'), false);
+});

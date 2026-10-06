@@ -20,6 +20,8 @@ const view = {
   createBackdrop: $('#create-backdrop'),
   appShell: $('.app-shell'),
   activitySidebar: $('#activity-sidebar'),
+  sidebarResizer: $('#sidebar-resizer'),
+  activityResizer: $('#activity-resizer'),
 };
 
 let state = { conversations: [], activeId: null, activeProjectId: null, activity: [] };
@@ -30,10 +32,8 @@ let sharedMemory = { summary: '', entries: [] };
 let projects = [];
 let agents = [];
 let customPlugins = [];
-let providerCatalog = [];
 let integrationStatus = {};
 let pendingConnectorIds = [];
-let pendingProviderIds = [];
 let modelStatus = { online: false, models: [] };
 let pendingAttachments = [];
 let activeRunId = null;
@@ -45,9 +45,11 @@ const runContexts = new Map();
 const approvals = [];
 let activeApproval = null;
 let saveTimer = null;
+let layoutSaveTimer = null;
 let searchQuery = '';
 let oldestFirst = false;
 let initialized = false;
+let layout = { sidebarWidth: 250, activityWidth: 360 };
 
 function uuid() {
   return globalThis.crypto?.randomUUID?.() || `run-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -152,6 +154,7 @@ function connectedConnectorIds() {
   if (integrationStatus.github?.connected) ids.push('github');
   if (integrationStatus.google?.connected) ids.push('google');
   if (integrationStatus.instagram?.connected) ids.push('instagram');
+  if (integrationStatus.telegram?.connected) ids.push('telegram');
   for (const server of integrationStatus.mcp || []) if (server.enabled) ids.push(server.id);
   return ids;
 }
@@ -160,12 +163,6 @@ function currentConnectorSelection() {
   if (activeProject()) return connectedConnectorIds();
   const conversation = activeConversation();
   return conversation ? (conversation.connectorIds || []) : pendingConnectorIds;
-}
-
-function currentProviderSelection() {
-  if (activeProject()) return Object.entries(integrationStatus.providers || {}).filter(([, connected]) => connected).map(([id]) => id);
-  const conversation = activeConversation();
-  return conversation ? (conversation.providerIds || []) : pendingProviderIds;
 }
 
 function updateConnectorSelectionUi() {
@@ -177,12 +174,6 @@ function updateConnectorSelectionUi() {
     button.classList.toggle('unavailable', !connected);
     button.title = !connected ? 'Сначала настройте это подключение в настройках.' : selectedConnectors.has(id) ? 'Подключение активно в этом чате' : 'Нажмите, чтобы включить в этом чате';
   });
-  const providerId = $('#chat-provider-select')?.value;
-  const providerActive = currentProviderSelection().includes(providerId);
-  const providerReady = Boolean(integrationStatus.providers?.[providerId]);
-  const providerToggle = $('#chat-provider-toggle');
-  providerToggle?.classList.toggle('selected', providerActive);
-  if (providerToggle) providerToggle.innerHTML = `<span>✦</span> API: ${providerActive ? 'вкл.' : providerReady ? 'выкл.' : 'ключ?'}`;
   for (const chip of document.querySelectorAll('[data-mcp-connector]')) {
     chip.classList.toggle('selected', selectedConnectors.has(chip.dataset.mcpConnector));
   }
@@ -199,17 +190,6 @@ function toggleConnectorSelection(id) {
   render(); scheduleSave();
 }
 
-function toggleProviderSelection() {
-  if (activeProject()) { showToast('В проекте доступны все сохранённые AI-провайдеры.', ''); return; }
-  const id = $('#chat-provider-select').value;
-  if (!integrationStatus.providers?.[id]) { openSettings('api'); showToast('Сначала добавьте API-ключ для этого провайдера.', ''); return; }
-  const conversation = activeConversation();
-  const selected = conversation ? (conversation.providerIds || []) : pendingProviderIds;
-  const next = selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id];
-  if (conversation) conversation.providerIds = next; else pendingProviderIds = next;
-  updateConnectorSelectionUi(); scheduleSave();
-}
-
 function formatBytes(value) {
   const bytes = Number(value) || 0;
   if (bytes < 1024) return `${bytes} Б`;
@@ -223,7 +203,7 @@ function basename(value) {
 }
 
 function makeConversation() {
-  const conversation = { id: uuid(), title: 'Новый диалог', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), projectId: state.activeProjectId || null, connectorIds: [...pendingConnectorIds], providerIds: [...pendingProviderIds], messages: [] };
+  const conversation = { id: uuid(), title: 'Новый диалог', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), projectId: state.activeProjectId || null, connectorIds: [...pendingConnectorIds], messages: [] };
   state.conversations.unshift(conversation);
   state.activeId = conversation.id;
   scheduleSave();
@@ -318,7 +298,7 @@ function renderProjects() {
 }
 
 function actionIcon(name) {
-  const icons = { web_search: '⌕', read_webpage: '↗', open_browser: '◎', list_workspace_files: '▧', read_workspace_file: '▤', write_workspace_file: '✎', create_document: '▤', generate_image: '✦', make_video: '▶', run_command: '⌘', remember: '✧' };
+  const icons = { web_search: '⌕', read_webpage: '↗', telegram_send_message: '➤', list_workspace_files: '▧', read_workspace_file: '▤', write_workspace_file: '✎', create_document: '▤', generate_image: '✦', make_video: '▶', run_command: '⌘', remember: '✧' };
   return icons[name] || '•';
 }
 
@@ -336,8 +316,8 @@ function activityIconFor(status, kind) {
 function addActivity({ id, label, details = '', status = 'running', kind = 'tool', runId = '', time = new Date().toISOString() }) {
   const activity = Array.isArray(state.activity) ? state.activity : (state.activity = []);
   let existing = id ? activity.find((item) => item.id === id) : null;
-  if (existing) Object.assign(existing, { label, details, status, kind, runId, time });
-  else activity.push({ id: id || uuid(), label: String(label || 'Действие').slice(0, 260), details: String(details || '').slice(0, 1200), status, kind, runId, time });
+  if (existing) Object.assign(existing, { label: String(label || existing.label || 'Действие').slice(0, 260), details: String(details || '').slice(0, 4000), status, kind, runId, time });
+  else activity.push({ id: id || uuid(), label: String(label || 'Действие').slice(0, 260), details: String(details || '').slice(0, 4000), status, kind, runId, time });
   state.activity = activity.slice(-120);
   scheduleSave();
   renderActivity();
@@ -604,22 +584,29 @@ function handleAgentEvent(event) {
   }
   if (event.type === 'tool-start') {
     setActivity(context, event, 'approval');
-    addActivity({ id: event.toolId, label: event.summary || event.name, details: 'Ожидает подтверждения пользователя', status: 'approval', kind: 'tool', runId: event.runId });
+    addActivity({ id: event.toolId, label: event.summary || event.name, details: event.arguments ? `Ожидает подтверждения пользователя\nАргументы:\n${event.arguments}` : 'Ожидает подтверждения пользователя', status: 'approval', kind: 'tool', runId: event.runId });
     runtimeDescription = `Подготовлен инструмент: ${event.name}`; renderActivity(); return;
   }
   if (event.type === 'approval-auto') {
-    addActivity({ id: event.toolId || uuid(), label: event.summary || event.name || 'Действие разрешено', details: 'Запущено в сохранённом режиме полного доступа', status: 'running', kind: 'tool', runId: event.runId });
+    const previous = state.activity.find((item) => item.id === event.toolId);
+    addActivity({ id: event.toolId || uuid(), label: previous?.label || event.summary || event.name || 'Действие разрешено', details: [previous?.details, 'Запущено в сохранённом режиме полного доступа'].filter(Boolean).join('\n'), status: 'running', kind: 'tool', runId: event.runId });
     return;
   }
   if (event.type === 'tool-running') {
     setActivity(context, event, 'running');
-    addActivity({ id: event.toolId, label: event.summary || event.name, details: 'Выполняется локально или через подключённый сервис', status: 'running', kind: 'tool', runId: event.runId });
+    const previous = state.activity.find((item) => item.id === event.toolId);
+    const priorDetails = String(previous?.details || '').replace(/^Ожидает подтверждения пользователя\s*/u, '').trim();
+    addActivity({ id: event.toolId, label: previous?.label || event.name, details: [priorDetails, 'Разрешено; выполняется локально или через подключённый сервис'].filter(Boolean).join('\n'), status: 'running', kind: 'tool', runId: event.runId });
     runtimeDescription = `Выполняется: ${event.name}`; return;
   }
   if (event.type === 'tool-complete') {
     const status = event.approved === false ? 'denied' : event.ok ? 'success' : 'error';
     setActivity(context, event, status);
-    addActivity({ id: event.toolId, label: event.summary || event.name, details: event.ok ? 'Результат получен' : event.summary || 'Инструмент сообщил об ошибке', status, kind: 'tool', runId: event.runId });
+    const previous = state.activity.find((item) => item.id === event.toolId);
+    const priorDetails = String(previous?.details || '').replace(/^Ожидает подтверждения пользователя\s*/u, '').trim().slice(0, 3000);
+    const resultDetails = event.summary || (event.ok ? 'Результат получен' : 'Инструмент сообщил об ошибке');
+    const details = [priorDetails, `Результат: ${resultDetails}`].filter(Boolean).join('\n');
+    addActivity({ id: event.toolId, label: previous?.label || event.name, details, status, kind: 'tool', runId: event.runId });
     runtimeDescription = event.ok ? `Завершено: ${event.name}` : `Нужно обойти ошибку: ${event.name}`;
     if (!event.ok && event.approved !== false) runtimeState = 'running';
     renderActivity(); return;
@@ -627,10 +614,6 @@ function handleAgentEvent(event) {
   if (event.type === 'run-retry') {
     runtimeState = 'running'; runtimeDescription = 'Попытка восстановления после ошибки…';
     addActivity({ id: `retry:${event.runId}:${event.attempt}`, label: 'Повторная попытка модели', details: event.message, status: 'error', kind: 'agent', runId: event.runId }); return;
-  }
-  if (event.type === 'cloud-fallback') {
-    runtimeDescription = `Резервный ответ через ${event.provider} · ${event.model}`;
-    addActivity({ id: `fallback:${event.runId}`, label: 'Используется резервный AI-провайдер', details: `${event.provider} · ${event.model}`, status: 'running', kind: 'agent', runId: event.runId }); return;
   }
   if (event.type === 'connector-error') {
     addActivity({ id: `connector-error:${event.runId}:${event.name}`, label: `Ошибка подключения · ${event.name}`, details: event.message, status: 'error', kind: 'tool', runId: event.runId }); return;
@@ -742,7 +725,7 @@ async function sendMessage() {
   beginAssistantRun(conversation, assistantMessage, runId);
   scheduleSave();
   try {
-    await api.sendTurn({ runId, model, history, text, attachmentIds, projectId: conversation.projectId || null, connectorIds: conversation.connectorIds || [], providerIds: conversation.providerIds || [] });
+    await api.sendTurn({ runId, model, history, text, attachmentIds, projectId: conversation.projectId || null, connectorIds: conversation.connectorIds || [] });
   } catch (error) {
     assistantMessage.error = error.message || 'Не удалось запустить запрос.';
     finishRun(runId);
@@ -768,27 +751,27 @@ function renderApproval() {
   view.approvalBackdrop.hidden = false;
   const actionName = String(activeApproval.name || '');
   const isHighRisk = activeApproval.risk === 'high';
-  const isNetwork = ['web_search', 'read_webpage', 'open_browser'].includes(actionName);
+  const isNetwork = ['web_search', 'read_webpage'].includes(actionName);
   const isWrite = ['write_workspace_file', 'create_document', 'generate_image', 'make_video', 'remember'].includes(actionName) || /create|publish|commit|draft|issue/i.test(actionName);
-  const title = actionName === 'agent_install' ? 'Установить GitHub skill?' : actionName === 'mcp_connect' ? 'Подключить MCP-сервер?' : actionName === 'cloud_fallback' || actionName === 'ask_specialist' ? 'Передать задачу облачному AI?' : actionName === 'run_command' ? 'Разрешить запуск команды?' : 'Разрешить действие?';
+  const title = actionName === 'agent_install' ? 'Установить GitHub skill?' : actionName === 'mcp_connect' ? 'Подключить MCP-сервер?' : actionName === 'telegram_send_message' ? 'Отправить сообщение в Telegram?' : actionName === 'run_command' ? 'Разрешить запуск команды?' : 'Разрешить действие?';
   const warningText = actionName === 'agent_install'
     ? 'Скачивается публичный репозиторий. Localis читает Markdown-инструкции и не исполняет код автоматически; всё равно проверьте источник и skill-текст.'
     : actionName === 'mcp_connect'
       ? 'Подключённый MCP-сервер может возвращать данные и выполнять внешние операции. В обычном режиме каждый вызов инструментов будет отдельно показан.'
-      : actionName === 'cloud_fallback' || actionName === 'ask_specialist'
-        ? 'Текст задачи и указанный в подробностях контекст будут отправлены выбранному внешнему AI-provider. API-ключ не появится в сообщении, но содержимое покинет этот компьютер.'
+      : actionName === 'telegram_send_message'
+        ? 'Сообщение будет отправлено через подключённого Telegram bot в сохранённый чат. Проверьте полный текст перед подтверждением.'
         : isHighRisk
           ? 'Команда или внешняя запись исполняется с правами вашей учётной записи Windows. Localis не создаёт OS-песочницу. Проверьте каждую команду и необратимое действие.'
           : 'Запрос отправит поисковый текст или URL в интернет. Содержимое сайтов считается недоверенными данными.';
   $('#approval-icon').textContent = isHighRisk ? '!' : isNetwork ? '↗' : isWrite ? '✎' : '◈';
-  $('#approval-kind').textContent = actionName === 'agent_install' ? 'УСТАНОВКА SKILL · ПРОВЕРЬТЕ ИСТОЧНИК' : actionName === 'cloud_fallback' || actionName === 'ask_specialist' ? 'ПЕРЕДАЧА ДАННЫХ В ОБЛАКО' : isHighRisk ? 'ПОВЫШЕННЫЙ РИСК · ПРОВЕРЬТЕ ДЕЙСТВИЕ' : isNetwork ? 'ДОСТУП К ИНТЕРНЕТУ' : isWrite ? 'ЗАПИСЬ ИЛИ СОЗДАНИЕ ДАННЫХ' : 'ДОСТУП К ФАЙЛАМ';
+  $('#approval-kind').textContent = actionName === 'agent_install' ? 'УСТАНОВКА SKILL · ПРОВЕРЬТЕ ИСТОЧНИК' : actionName === 'telegram_send_message' ? 'ВНЕШНЕЕ СООБЩЕНИЕ · TELEGRAM' : isHighRisk ? 'ПОВЫШЕННЫЙ РИСК · ПРОВЕРЬТЕ ДЕЙСТВИЕ' : isNetwork ? 'ДОСТУП К ИНТЕРНЕТУ' : isWrite ? 'ЗАПИСЬ ИЛИ СОЗДАНИЕ ДАННЫХ' : 'ДОСТУП К ФАЙЛАМ';
   $('#approval-title').textContent = title;
   $('#approval-summary').textContent = activeApproval.summary || actionName;
   $('#approval-detail').textContent = activeApproval.arguments || '{}';
   const warning = $('#approval-warning');
-  warning.hidden = !isHighRisk && !isNetwork && !['cloud_fallback', 'ask_specialist', 'agent_install', 'mcp_connect'].includes(actionName);
+  warning.hidden = !isHighRisk && !isNetwork && !['agent_install', 'mcp_connect', 'telegram_send_message'].includes(actionName);
   warning.querySelector('p').textContent = warningText;
-  $('#approval-accept').innerHTML = actionName === 'cloud_fallback' || actionName === 'ask_specialist' ? 'Передать задачу <span>→</span>' : actionName === 'agent_install' ? 'Установить skill <span>→</span>' : 'Разрешить один раз <span>→</span>';
+  $('#approval-accept').innerHTML = actionName === 'agent_install' ? 'Установить skill <span>→</span>' : actionName === 'telegram_send_message' ? 'Отправить сообщение <span>→</span>' : 'Разрешить один раз <span>→</span>';
 }
 
 async function answerApproval(approved) {
@@ -816,37 +799,10 @@ function applyTheme() {
 }
 
 function selectSettingsTab(tab = 'general') {
-  const valid = ['general', 'api', 'connectors', 'plugins', 'agents', 'memory'];
+  const valid = ['general', 'connectors', 'plugins', 'agents', 'memory'];
   const selected = valid.includes(tab) ? tab : 'general';
   document.querySelectorAll('.settings-tab').forEach((button) => button.classList.toggle('active', button.dataset.settingsTab === selected));
   document.querySelectorAll('.settings-panel').forEach((panel) => panel.classList.toggle('active', panel.dataset.settingsPanel === selected));
-}
-
-function renderProviderSettings() {
-  const target = $('#provider-list');
-  target.replaceChildren();
-  for (const provider of providerCatalog) {
-    const connected = Boolean(integrationStatus.providers?.[provider.id]);
-    const card = document.createElement('div'); card.className = 'provider-card'; card.dataset.providerCard = provider.id;
-    card.innerHTML = `<div class="provider-card-header"><div><strong>${escapeHtml(provider.name)}</strong><small>${escapeHtml(provider.defaultModel)} · совместимый API</small></div><span class="status-badge${connected ? ' connected' : ''}">${connected ? 'Ключ сохранён' : 'Не настроен'}</span></div><div class="provider-fields"><label><span>API key</span><input type="password" autocomplete="off" data-provider-key="${escapeHtml(provider.id)}" placeholder="Вставьте ключ для настройки"></label><label><span>Модель (необязательно)</span><input type="text" autocomplete="off" data-provider-model="${escapeHtml(provider.id)}" value="${escapeHtml(provider.defaultModel)}" placeholder="${escapeHtml(provider.defaultModel)}"></label></div><div class="field-help">Ключ сохраняется отдельно и шифруется Windows DPAPI. В чат он не добавляется и доступен только запросу этого провайдера.</div><div class="provider-card-actions"><button class="button-secondary" data-provider-action="test" data-provider="${escapeHtml(provider.id)}">Проверить</button>${connected ? `<button class="button-secondary" data-provider-action="remove" data-provider="${escapeHtml(provider.id)}">Удалить ключ</button>` : ''}<button class="button-primary" data-provider-action="save" data-provider="${escapeHtml(provider.id)}">Сохранить ключ</button></div>`;
-    target.append(card);
-  }
-  const fallback = $('#fallback-provider'); fallback.replaceChildren();
-  for (const provider of providerCatalog) {
-    const option = document.createElement('option'); option.value = provider.id; option.textContent = provider.name; fallback.append(option);
-  }
-  fallback.value = config.fallbackProvider || 'openai';
-  const chatProvider = $('#chat-provider-select');
-  if (chatProvider) {
-    const selected = chatProvider.value;
-    chatProvider.replaceChildren();
-    for (const provider of providerCatalog) {
-      const option = document.createElement('option'); option.value = provider.id; option.textContent = provider.name.replace(' / ChatGPT', ''); chatProvider.append(option);
-    }
-    if (providerCatalog.some((provider) => provider.id === selected)) chatProvider.value = selected;
-    else if (providerCatalog[0]) chatProvider.value = providerCatalog[0].id;
-  }
-  updateConnectorSelectionUi();
 }
 
 function renderConnectorSettings() {
@@ -854,7 +810,7 @@ function renderConnectorSettings() {
   catalog.replaceChildren();
   const customMcp = integrationStatus.mcp || [];
   const rows = (integrationStatus.catalog || []).filter((item, index, all) => all.findIndex((row) => row.id === item.id) === index);
-  $('#connected-count').textContent = String([integrationStatus.github?.connected, integrationStatus.google?.connected, integrationStatus.instagram?.connected, ...customMcp.map((item) => item.enabled)].filter(Boolean).length);
+  $('#connected-count').textContent = String([integrationStatus.github?.connected, integrationStatus.google?.connected, integrationStatus.instagram?.connected, integrationStatus.telegram?.connected, ...customMcp.map((item) => item.enabled)].filter(Boolean).length);
   const grid = document.createElement('div'); grid.className = 'catalog-grid';
   for (const connector of rows) {
     let connected = false;
@@ -862,6 +818,7 @@ function renderConnectorSettings() {
     if (connector.id === 'github') { connected = integrationStatus.github?.connected; details = connected ? `@${integrationStatus.github.account || 'GitHub'}` : 'REST API'; }
     if (['google', 'gmail', 'google-drive', 'google-calendar'].includes(connector.id)) { connected = integrationStatus.google?.connected; details = connected ? integrationStatus.google.account || 'Google OAuth' : connector.kind === 'oauth' ? 'OAuth · Drive, Gmail, Calendar' : details; }
     if (connector.id === 'instagram') { connected = integrationStatus.instagram?.connected; details = connected ? `@${integrationStatus.instagram.account}` : 'Graph API · Business/Creator'; }
+    if (connector.id === 'telegram') { connected = integrationStatus.telegram?.connected; details = connected ? `${integrationStatus.telegram.botUsername ? `@${integrationStatus.telegram.botUsername}` : 'bot'} · ${integrationStatus.telegram.chatName || integrationStatus.telegram.chatId}` : 'Bot token + chat ID'; }
     if (connector.kind === 'mcp') {
       const matched = customMcp.find((server) => server.enabled && server.name.toLowerCase().includes(connector.name.toLowerCase()));
       if (matched) { connected = true; details = `${matched.toolCount} MCP tools`; }
@@ -878,14 +835,16 @@ function renderConnectorSettings() {
     const chip = document.createElement('button'); chip.type = 'button'; chip.className = 'connector-chip mcp-chip'; chip.dataset.mcpConnector = server.id; chip.textContent = server.name;
     chip.title = `${server.toolCount || 0} инструментов MCP · нажмите, чтобы включить в этот чат`;
     chip.addEventListener('click', () => toggleConnectorSelection(server.id));
-    strip.insertBefore(chip, $('#chat-provider-select'));
+    strip.insertBefore(chip, $('#composer-connectors'));
   }
   const github = integrationStatus.github || {};
   const google = integrationStatus.google || {};
   const instagram = integrationStatus.instagram || {};
+  const telegram = integrationStatus.telegram || {};
   $('#github-status').textContent = github.connected ? `Подключён · ${github.account || 'GitHub'}` : 'Не подключён';
   $('#google-status').textContent = google.connected ? `Подключён · ${google.email || 'Google'}` : 'Не подключён';
   $('#instagram-status').textContent = instagram.connected ? `Подключён · @${instagram.account || 'Instagram'}` : 'Не подключён';
+  $('#telegram-status').textContent = telegram.connected ? `Подключён · ${telegram.botUsername ? `@${telegram.botUsername}` : 'bot'} → ${telegram.chatName || telegram.chatId}` : 'Не подключён';
 }
 
 function renderPluginSettings() {
@@ -974,17 +933,16 @@ function fillSettings() {
   $('#setting-theme').value = config.theme || 'midnight';
   $('#approval-mode').value = config.approvalMode || 'ask';
   $('#full-access-warning').classList.toggle('visible', config.approvalMode === 'full');
-  $('#cloud-fallback-enabled').checked = Boolean(config.cloudFallbackEnabled);
   updateMemoryPanel();
-  renderProviderSettings(); renderConnectorSettings(); renderPluginSettings(); renderAgentSettings();
+  renderConnectorSettings(); renderPluginSettings(); renderAgentSettings();
 }
 
 async function reloadLocalState() {
   const loaded = await api.getState();
   agents = loaded.agents || []; customPlugins = loaded.plugins || []; integrationStatus = loaded.integrations || {};
-  providerCatalog = loaded.providers || []; memoryNotes = loaded.memoryNotes || []; sharedMemory = loaded.sharedMemory || { summary: '', entries: [] };
+  memoryNotes = loaded.memoryNotes || []; sharedMemory = loaded.sharedMemory || { summary: '', entries: [] };
   projects = loaded.projects || [];
-  renderProviderSettings(); renderConnectorSettings(); renderPluginSettings(); renderAgentSettings(); updateMemoryPanel(); renderProjects();
+  renderConnectorSettings(); renderPluginSettings(); renderAgentSettings(); updateMemoryPanel(); renderProjects();
 }
 
 async function persistSettings() {
@@ -1035,14 +993,118 @@ async function confirmCreate() {
   finally { button.disabled = false; }
 }
 
+function normalizePanelLayout() {
+  const minSidebar = 190;
+  const minActivity = 260;
+  const maxCombined = window.innerWidth <= 1090
+    ? Infinity
+    : Math.max(minSidebar + minActivity, window.innerWidth - 12 - 360);
+  let sidebarWidth = Math.min(460, Math.max(minSidebar, Number(layout.sidebarWidth) || 250));
+  let activityWidth = Math.min(620, Math.max(minActivity, Number(layout.activityWidth) || 360));
+  if (sidebarWidth + activityWidth > maxCombined) {
+    const reducibleSidebar = sidebarWidth - minSidebar;
+    const reducibleActivity = activityWidth - minActivity;
+    const totalReducible = reducibleSidebar + reducibleActivity;
+    const reduction = sidebarWidth + activityWidth - maxCombined;
+    if (totalReducible > 0) {
+      sidebarWidth -= reduction * reducibleSidebar / totalReducible;
+      activityWidth -= reduction * reducibleActivity / totalReducible;
+    }
+  }
+  return { sidebarWidth: Math.round(sidebarWidth), activityWidth: Math.round(activityWidth) };
+}
+
+function applyPanelLayout() {
+  if (!view.appShell) return;
+  layout = normalizePanelLayout();
+  view.appShell.style.setProperty('--sidebar-width', `${layout.sidebarWidth}px`);
+  view.appShell.style.setProperty('--activity-width', `${layout.activityWidth}px`);
+  for (const [handle, value] of [[view.sidebarResizer, layout.sidebarWidth], [view.activityResizer, layout.activityWidth]]) {
+    if (!handle) continue;
+    const isSidebar = handle === view.sidebarResizer;
+    handle.setAttribute('aria-valuemin', isSidebar ? '190' : '260');
+    handle.setAttribute('aria-valuemax', String(isSidebar
+      ? Math.max(190, Math.min(460, window.innerWidth - 12 - 360 - layout.activityWidth))
+      : Math.max(260, Math.min(620, window.innerWidth - 12 - 360 - layout.sidebarWidth))));
+    handle.setAttribute('aria-valuenow', String(value));
+  }
+}
+
+function savePanelLayout() {
+  applyPanelLayout();
+  if (!initialized) return;
+  clearTimeout(layoutSaveTimer);
+  layoutSaveTimer = setTimeout(() => {
+    api.saveLayout({ ...layout })
+      .catch((error) => showToast(`Не удалось сохранить ширину панелей: ${error.message}`, 'error'));
+  }, 180);
+}
+
+function bindPanelResizer(handle, side) {
+  if (!handle) return;
+  const minWidth = side === 'sidebar' ? 190 : 260;
+  const currentWidth = () => side === 'sidebar' ? layout.sidebarWidth : layout.activityWidth;
+  const maximumWidth = () => Math.max(minWidth, Math.min(side === 'sidebar' ? 460 : 620,
+    window.innerWidth - 12 - 360 - (side === 'sidebar' ? layout.activityWidth : layout.sidebarWidth)));
+  const setWidth = (width) => {
+    layout = { ...layout, [side === 'sidebar' ? 'sidebarWidth' : 'activityWidth']: Math.min(maximumWidth(), Math.max(minWidth, width)) };
+    applyPanelLayout();
+  };
+  handle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || window.matchMedia('(max-width: 1090px)').matches) return;
+    event.preventDefault();
+    const pointerId = event.pointerId;
+    handle.classList.add('dragging');
+    document.body.classList.add('resizing-panels');
+    try { handle.setPointerCapture(pointerId); } catch {}
+    const move = (moveEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      const midpoint = handle.getBoundingClientRect().width / 2;
+      const width = side === 'sidebar' ? moveEvent.clientX - midpoint : window.innerWidth - moveEvent.clientX - midpoint;
+      setWidth(width);
+    };
+    const finish = (upEvent) => {
+      if (upEvent.pointerId !== pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      handle.classList.remove('dragging');
+      document.body.classList.remove('resizing-panels');
+      try { if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId); } catch {}
+      savePanelLayout();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+  });
+  handle.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key) || window.matchMedia('(max-width: 1090px)').matches) return;
+    event.preventDefault();
+    if (event.key === 'Home') setWidth(minWidth);
+    else if (event.key === 'End') setWidth(maximumWidth());
+    else {
+      const increasing = side === 'sidebar' ? event.key === 'ArrowRight' : event.key === 'ArrowLeft';
+      setWidth(currentWidth() + (increasing ? 20 : -20));
+    }
+    savePanelLayout();
+  });
+  handle.addEventListener('dblclick', () => {
+    layout = { ...layout, [side === 'sidebar' ? 'sidebarWidth' : 'activityWidth']: side === 'sidebar' ? 250 : 360 };
+    savePanelLayout();
+  });
+}
+
 function setActivityPanelVisible(visible) {
   if (window.matchMedia('(max-width: 1090px)').matches) view.activitySidebar.classList.toggle('open', visible);
   else view.appShell.classList.toggle('activity-hidden', !visible);
 }
 
 function bindEvents() {
+  bindPanelResizer(view.sidebarResizer, 'sidebar');
+  bindPanelResizer(view.activityResizer, 'activity');
+  window.addEventListener('resize', applyPanelLayout);
   $('#new-chat').addEventListener('click', () => {
-    state.activeId = null; pendingConnectorIds = []; pendingProviderIds = [];
+    state.activeId = null; pendingConnectorIds = [];
     render(); scheduleSave(); view.input.focus(); view.sidebar.classList.remove('open');
   });
   $('#create-folder').addEventListener('click', () => openCreateDialog('folder'));
@@ -1062,8 +1124,6 @@ function bindEvents() {
   $('#composer-plugins').addEventListener('click', () => openSettings('plugins'));
   $('#composer-agents').addEventListener('click', () => openSettings('agents'));
   document.querySelectorAll('.connector-chip[data-connector]').forEach((button) => button.addEventListener('click', () => toggleConnectorSelection(button.dataset.connector)));
-  $('#chat-provider-select').addEventListener('change', updateConnectorSelectionUi);
-  $('#chat-provider-toggle').addEventListener('click', toggleProviderSelection);
   $('#composer-project-select').addEventListener('click', () => {
     const current = state.activeProjectId;
     const nextIndex = current ? projects.findIndex((project) => project.id === current) + 1 : 0;
@@ -1094,8 +1154,6 @@ function bindEvents() {
     config.uiLanguage = $('#setting-language').value;
     config.theme = $('#setting-theme').value;
     config.approvalMode = $('#approval-mode').value;
-    config.cloudFallbackEnabled = $('#cloud-fallback-enabled').checked;
-    config.fallbackProvider = $('#fallback-provider').value;
     try {
       await persistSettings(); render(); closeSettings(); await refreshModelRuntime({ quiet: false });
       showToast('Настройки сохранены на этом компьютере.', 'success');
@@ -1126,9 +1184,10 @@ function bindEvents() {
       button.disabled = Boolean(modelStatus.checking);
     }
   });
-  $('#fallback-provider').addEventListener('change', () => { config.fallbackProvider = $('#fallback-provider').value; });
   view.connection.addEventListener('click', () => refreshModelRuntime({ quiet: false }));
-  $('#browser-open').addEventListener('click', async () => { try { await api.openBrowser('https://duckduckgo.com'); } catch (error) { showToast(error.message || 'Не удалось открыть браузер.', 'error'); } });
+  const openArena = () => api.openExternal('https://arena.ai/agent').catch((error) => showToast(error.message || 'Не удалось открыть Arena.ai.', 'error'));
+  $('#arena-open').addEventListener('click', openArena);
+  $('#arena-open-settings').addEventListener('click', openArena);
   $('#open-workspace').addEventListener('click', async () => { try { await api.openWorkspace(); } catch (error) { showToast(error.message, 'error'); } });
   $('#memory-button').addEventListener('click', () => openSettings('memory'));
   $('#clear-memory').addEventListener('click', async () => {
@@ -1171,6 +1230,17 @@ function bindEvents() {
     catch (error) { showToast(error.message || 'Не удалось подключить Instagram.', 'error', 6000); }
     finally { button.disabled = false; }
   });
+  $('#telegram-connect').addEventListener('click', async () => {
+    const button = $('#telegram-connect'); button.disabled = true;
+    try {
+      integrationStatus = await api.connectTelegram($('#telegram-token').value.trim(), $('#telegram-chat-id').value.trim());
+      $('#telegram-token').value = '';
+      await reloadLocalState();
+      addActivity({ id: `connector:telegram:${Date.now()}`, label: 'Подключён Telegram bot', details: `${integrationStatus.telegram?.botUsername ? `@${integrationStatus.telegram.botUsername}` : 'bot'} → ${integrationStatus.telegram?.chatName || integrationStatus.telegram?.chatId}`, status: 'success', kind: 'tool' });
+      showToast('Telegram bot проверен и сохранён.', 'success');
+    } catch (error) { showToast(error.message || 'Не удалось подключить Telegram bot.', 'error', 6000); }
+    finally { button.disabled = false; }
+  });
   document.querySelectorAll('[data-disconnect]').forEach((button) => button.addEventListener('click', async () => {
     try { integrationStatus = await api.disconnectConnector(button.dataset.disconnect); await reloadLocalState(); showToast('Подключение удалено.', 'success'); }
     catch (error) { showToast(error.message, 'error'); }
@@ -1182,26 +1252,6 @@ function bindEvents() {
       $('#mcp-token').value = ''; integrationStatus = result.integrations; await reloadLocalState();
       showToast(`MCP подключён · ${result.server.toolCount} tools.`, 'success');
     } catch (error) { showToast(error.message || 'Не удалось подключить MCP.', 'error', 6000); }
-    finally { button.disabled = false; }
-  });
-
-  $('#provider-list').addEventListener('click', async (event) => {
-    const button = event.target.closest('[data-provider-action]'); if (!button) return;
-    const provider = button.dataset.provider; const action = button.dataset.providerAction; const card = button.closest('.provider-card');
-    const key = card.querySelector(`[data-provider-key="${CSS.escape(provider)}"]`).value.trim();
-    const model = card.querySelector(`[data-provider-model="${CSS.escape(provider)}"]`).value.trim();
-    button.disabled = true;
-    try {
-      if (action === 'test') {
-        const result = await api.testApiKey(provider, key); showToast(`${providerCatalog.find((item) => item.id === provider)?.name}: соединение работает · ${result.model}`, 'success', 5000);
-      } else if (action === 'save') {
-        const tested = await api.testApiKey(provider, key);
-        integrationStatus = await api.saveApiKey(provider, key, model);
-        await reloadLocalState(); showToast(`Ключ сохранён и проверен · ${tested.model}`, 'success');
-      } else if (action === 'remove') {
-        integrationStatus = await api.removeApiKey(provider); await reloadLocalState(); showToast('API-ключ удалён из зашифрованного хранилища.', 'success');
-      }
-    } catch (error) { showToast(error.message || 'Ошибка AI-провайдера.', 'error', 6500); }
     finally { button.disabled = false; }
   });
 
@@ -1288,7 +1338,7 @@ function bindEvents() {
   document.addEventListener('click', (event) => {
     const link = event.target.closest('a[data-external-link]');
     if (!link) return;
-    event.preventDefault(); api.openBrowser(link.getAttribute('href')).catch((error) => showToast(error.message, 'error'));
+    event.preventDefault(); api.openExternal(link.getAttribute('href')).catch((error) => showToast(error.message, 'error'));
   });
   api.onAgentEvent(handleAgentEvent);
   api.onApproval((approval) => { approvals.push(approval); if (!activeApproval) renderApproval(); });
@@ -1301,7 +1351,6 @@ async function bootstrap() {
     const loaded = await api.getState();
     config = loaded.config || {};
     integrationStatus = loaded.integrations || {};
-    providerCatalog = loaded.providers || [];
     memoryNotes = loaded.memoryNotes || [];
     memoryCount = memoryNotes.length;
     sharedMemory = loaded.sharedMemory || { summary: '', entries: [] };
@@ -1310,13 +1359,15 @@ async function bootstrap() {
     customPlugins = loaded.plugins || [];
     state = loaded.appState && Array.isArray(loaded.appState.conversations)
       ? loaded.appState : { conversations: [], activeId: null, activeProjectId: null, activity: [] };
+    layout = loaded.layout && typeof loaded.layout === 'object' ? loaded.layout : { sidebarWidth: 250, activityWidth: 360 };
+    applyPanelLayout();
     state.projects = projects;
     state.activity = Array.isArray(state.activity) ? state.activity.slice(-120) : [];
     state.activeProjectId = projects.some((project) => project.id === state.activeProjectId) ? state.activeProjectId : null;
     state.conversations = state.conversations.filter((conversation) => conversation && typeof conversation.id === 'string' && Array.isArray(conversation.messages)).slice(0, 100);
     for (const conversation of state.conversations) {
       conversation.connectorIds = Array.isArray(conversation.connectorIds) ? conversation.connectorIds : [];
-      conversation.providerIds = Array.isArray(conversation.providerIds) ? conversation.providerIds : [];
+      delete conversation.providerIds;
       if (conversation.projectId && !projects.some((project) => project.id === conversation.projectId)) conversation.projectId = null;
       conversation.messages = conversation.messages.filter((message) => message && ['user', 'assistant'].includes(message.role)).slice(-200);
       for (const message of conversation.messages) {

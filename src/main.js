@@ -4,7 +4,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const {
-  app, BrowserWindow, WebContentsView, dialog, ipcMain, shell, safeStorage, screen,
+  app, BrowserWindow, dialog, ipcMain, shell, safeStorage, screen,
 } = require('electron');
 app.setName('localis-ai');
 
@@ -13,23 +13,21 @@ const { defaultConfig, readJson, validateConfig, writeJsonAtomic } = require('./
 const { normalizeLocalServiceUrl, assertPublicHttpUrl, isLoopbackHost } = require('./lib/security');
 const fs = require('node:fs/promises');
 const { listWorkspaceFiles } = require('./lib/files');
-const { SecretVault } = require('./lib/secrets');
+const { SecretVault, removeLegacyProviderCredentials } = require('./lib/secrets');
 const { normalizeMemory, appendTurn, redactSensitive } = require('./lib/memory');
 const { BUILTIN_PLUGINS, installPluginFromUrl, normalizeImportedPlugin } = require('./lib/plugins');
 const { HttpMcpClient, buildMcpToolMap, toModelTool } = require('./lib/mcp');
 const { installGithubAgent, runLocalSubagent } = require('./lib/agents');
 const { createWorkspaceFolder, createWorkspaceProject, projectById, validateProjectRoot } = require('./lib/projects');
-const { CONNECTOR_CATALOG, availableConnectorTools, executeConnectorTool, testGithub, testInstagram, testProvider } = require('./lib/connectors');
-const { PROVIDERS, callProvider, providerInfo } = require('./lib/providers');
+const { CONNECTOR_CATALOG, availableConnectorTools, executeConnectorTool, testGithub, testInstagram, testTelegram } = require('./lib/connectors');
 const { LocalisEngine } = require('./lib/localis-engine');
 const { GOOGLE_SCOPES, startGoogleOAuth } = require('./lib/google-oauth');
 const { isPathInside } = require('./lib/security');
 
 let mainWindow = null;
-let browserWindow = null;
-let browserView = null;
 let configCache = null;
 let vaultCache = null;
+let legacyProviderKeyCleanup = null;
 let localisEngine = null;
 const mcpClients = new Map();
 const activeRuns = new Map();
@@ -42,6 +40,7 @@ const memoryPath = () => path.join(app.getPath('userData'), 'memory.json');
 const sharedMemoryPath = () => path.join(app.getPath('userData'), 'global-memory.json');
 const secretsPath = () => path.join(app.getPath('userData'), 'secrets.enc');
 const projectsPath = () => path.join(app.getPath('userData'), 'projects.json');
+const layoutPath = () => path.join(app.getPath('userData'), 'layout.json');
 const agentsPath = () => path.join(app.getPath('userData'), 'agents.json');
 const pluginsPath = () => path.join(app.getPath('userData'), 'plugins.json');
 
@@ -61,10 +60,6 @@ function requireAppSender(event) {
   if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('Недоверенный источник IPC-запроса.');
 }
 
-function requireBrowserSender(event) {
-  if (!browserWindow || event.sender !== browserWindow.webContents) throw new Error('Недоверенный источник browser IPC-запроса.');
-}
-
 function sendApp(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
@@ -73,18 +68,20 @@ function emitAgent(payload) {
   sendApp('agent:event', payload);
 }
 
-function updateBrowserState(state = {}) {
-  if (browserWindow && !browserWindow.isDestroyed()) browserWindow.webContents.send('browser:state', state);
-}
-
 async function getConfig() {
   if (configCache) return configCache;
-  const defaults = defaultConfig(app.getPath('documents'));
-  const raw = await readJson(configPath(), defaults);
-  try {
-    configCache = validateConfig(raw, app.getPath('documents'));
-  } catch {
-    configCache = defaults;
+  const documentsPath = app.getPath('documents');
+  const defaults = defaultConfig(documentsPath);
+  const settingsFile = configPath();
+  const raw = await readJson(settingsFile, defaults);
+  let normalized;
+  try { normalized = validateConfig(raw, documentsPath); }
+  catch { normalized = defaults; }
+  configCache = normalized;
+  if (JSON.stringify(raw) !== JSON.stringify(normalized)) {
+    await writeJsonAtomic(settingsFile, normalized).catch((error) => {
+      console.error('Could not remove obsolete settings fields:', error.message || String(error));
+    });
   }
   return configCache;
 }
@@ -101,6 +98,20 @@ async function getSharedMemory() {
 async function getVault() {
   if (!vaultCache) vaultCache = new SecretVault({ filePath: secretsPath(), safeStorage });
   return vaultCache;
+}
+
+async function purgeLegacyProviderKeys() {
+  if (!legacyProviderKeyCleanup) {
+    legacyProviderKeyCleanup = (async () => {
+      const vault = await getVault();
+      return removeLegacyProviderCredentials(vault);
+    })().catch((error) => {
+      legacyProviderKeyCleanup = null;
+      console.error('Could not remove legacy cloud AI credentials:', error.message || String(error));
+      return false;
+    });
+  }
+  return legacyProviderKeyCleanup;
 }
 
 async function getProjects() {
@@ -120,18 +131,19 @@ async function getCustomPlugins() {
 
 async function getIntegrationStatus() {
   const vault = await getVault();
-  const [github, google, instagram, providerEntries] = await Promise.all([
+  await purgeLegacyProviderKeys();
+  const [github, google, instagram, telegram] = await Promise.all([
     vault.get(['connectors', 'github'], {}),
     vault.get(['connectors', 'google'], {}),
     vault.get(['connectors', 'instagram'], {}),
-    Promise.all(Object.keys(PROVIDERS).map(async (id) => [id, Boolean(await vault.get(['providers', id, 'key'], ''))])),
+    vault.get(['connectors', 'telegram'], {}),
   ]);
   const config = await getConfig();
   return {
     github: { connected: Boolean(github?.token), account: String(github?.account || '') },
     google: { connected: Boolean(google?.refreshToken || google?.accessToken), account: String(google?.email || ''), name: String(google?.name || '') },
     instagram: { connected: Boolean(instagram?.token && instagram?.instagramUserId), account: String(instagram?.username || instagram?.instagramUserId || '') },
-    providers: Object.fromEntries(providerEntries),
+    telegram: { connected: Boolean(telegram?.botToken && telegram?.chatId), botUsername: String(telegram?.botUsername || ''), chatId: String(telegram?.chatId || ''), chatName: String(telegram?.chatName || '') },
     mcp: (config.mcpServers || []).map((server) => ({ id: server.id, name: server.name, enabled: server.enabled, toolCount: server.toolNames?.length || 0 })),
     catalog: CONNECTOR_CATALOG,
   };
@@ -191,111 +203,6 @@ function createMainWindow() {
   return mainWindow;
 }
 
-function browserBounds() {
-  if (!browserWindow || !browserView || browserWindow.isDestroyed()) return;
-  const [width, height] = browserWindow.getContentSize();
-  browserView.setBounds({ x: 0, y: 88, width, height: Math.max(100, height - 88) });
-}
-
-function normalizeBrowserAddress(value) {
-  const text = String(value || '').trim();
-  if (!text) throw new Error('Введите адрес сайта.');
-  let candidate = text;
-  if (!/^https?:\/\//i.test(candidate)) {
-    candidate = /^[\w-]+\.[a-z]{2,}(?:\/|$)/i.test(candidate)
-      ? `https://${candidate}`
-      : `https://duckduckgo.com/?q=${encodeURIComponent(candidate)}`;
-  }
-  const url = new URL(candidate);
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Разрешены только HTTP и HTTPS адреса.');
-  return url.href;
-}
-
-async function openBrowser(targetUrl = 'https://duckduckgo.com') {
-  const safeUrl = (await assertPublicHttpUrl(normalizeBrowserAddress(targetUrl))).href;
-  if (browserWindow && !browserWindow.isDestroyed() && browserView && !browserView.webContents.isDestroyed()) {
-    browserWindow.show();
-    browserWindow.focus();
-    await browserView.webContents.loadURL(safeUrl);
-    return safeUrl;
-  }
-
-  browserWindow = new BrowserWindow({
-    width: 1260,
-    height: 860,
-    minWidth: 760,
-    minHeight: 560,
-    backgroundColor: '#0c121b',
-    title: 'Браузер · Localis',
-    autoHideMenuBar: true,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'browser-preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
-    },
-  });
-  const browserPageUrl = pathToFileURL(path.join(__dirname, 'browser.html')).href;
-  browserWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  browserWindow.webContents.on('will-navigate', (event, url) => {
-    if (url !== browserPageUrl) event.preventDefault();
-  });
-  browserView = new WebContentsView({
-    webPreferences: {
-      partition: 'persist:localis-browser',
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
-      webviewTag: false,
-    },
-  });
-  browserWindow.contentView.addChildView(browserView);
-  browserBounds();
-  browserWindow.on('resize', browserBounds);
-  browserWindow.on('closed', () => {
-    browserWindow = null;
-    browserView = null;
-  });
-
-  const remoteContents = browserView.webContents;
-  remoteContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
-    assertPublicHttpUrl(details.url).then(() => callback({})).catch(() => callback({ cancel: true }));
-  });
-  remoteContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-  remoteContents.session.setPermissionCheckHandler(() => false);
-  remoteContents.setWindowOpenHandler(({ url }) => {
-    updateBrowserState({ error: 'Всплывающее окно заблокировано. Ссылку можно открыть вручную.' });
-    return { action: 'deny' };
-  });
-  const allowWebNavigation = (event, url) => {
-    try {
-      const parsed = new URL(url);
-      if (!['http:', 'https:'].includes(parsed.protocol)) event.preventDefault();
-    } catch { event.preventDefault(); }
-  };
-  remoteContents.on('will-navigate', allowWebNavigation);
-  remoteContents.on('will-redirect', allowWebNavigation);
-  remoteContents.on('did-start-loading', () => updateBrowserState({ url: remoteContents.getURL(), title: remoteContents.getTitle(), loading: true }));
-  remoteContents.on('did-navigate', (_event, url) => updateBrowserState({ url, title: remoteContents.getTitle(), loading: false }));
-  remoteContents.on('did-navigate-in-page', (_event, url) => updateBrowserState({ url, title: remoteContents.getTitle(), loading: false }));
-  remoteContents.on('page-title-updated', (_event, title) => updateBrowserState({ url: remoteContents.getURL(), title, loading: false }));
-  remoteContents.on('did-stop-loading', () => updateBrowserState({ url: remoteContents.getURL(), title: remoteContents.getTitle(), loading: false }));
-  remoteContents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
-    if (isMainFrame && code !== -3) updateBrowserState({ url: remoteContents.getURL(), error: description, loading: false });
-  });
-
-  await browserWindow.loadFile(path.join(__dirname, 'browser.html'));
-  browserWindow.show();
-  await remoteContents.loadURL(safeUrl);
-  updateBrowserState({ url: safeUrl, title: safeUrl, loading: false });
-  return safeUrl;
-}
-
 async function requestApproval(detail, signal) {
   const config = await getConfig();
   if (config.approvalMode === 'full') {
@@ -349,9 +256,23 @@ function setupIpc() {
       agents: agents.map(({ instructions, ...summary }) => summary),
       plugins,
       integrations,
-      providers: Object.entries(PROVIDERS).map(([id, provider]) => ({ id, ...provider })),
       workspace: config.workspaceDirectory,
+      layout: await readJson(layoutPath(), { sidebarWidth: 250, activityWidth: 360 }),
     };
+  });
+
+  ipcMain.handle('layout:save', async (event, value) => {
+    requireAppSender(event);
+    const width = (candidate, fallback, min, max) => {
+      const number = Number(candidate);
+      return Number.isFinite(number) ? Math.round(Math.min(max, Math.max(min, number))) : fallback;
+    };
+    const layout = {
+      sidebarWidth: width(value?.sidebarWidth, 250, 190, 460),
+      activityWidth: width(value?.activityWidth, 360, 260, 620),
+    };
+    await writeJsonAtomic(layoutPath(), layout);
+    return layout;
   });
 
   ipcMain.handle('app:save-state', async (event, value) => {
@@ -371,7 +292,7 @@ function setupIpc() {
       const choice = await dialog.showMessageBox(mainWindow, {
         type: 'warning', title: 'Включить полный доступ Localis?',
         message: 'Вы отключаете запрос разрешения перед каждым действием.',
-        detail: 'Агент сможет автоматически читать и записывать файлы вне рабочей папки, запускать команды с правами вашей учётной записи Windows, обращаться к включённым внешним сервисам и передавать данные подключённым AI-провайдерам. Это не OS-песочница; ошибка или prompt injection может причинить ущерб. Включайте только если доверяете выбранной модели и текущей задаче.',
+        detail: 'Агент сможет автоматически читать и записывать файлы вне рабочей папки, запускать команды с правами вашей учётной записи Windows и обращаться к включённым внешним сервисам. Это не OS-песочница; ошибка или prompt injection может причинить ущерб. Включайте только если доверяете выбранной модели и текущей задаче.',
         buttons: ['Включить полный доступ', 'Оставить подтверждения'], defaultId: 1, cancelId: 1, noLink: true,
       });
       if (choice.response !== 0) throw new Error('Полный доступ не включён; сохранён режим подтверждения каждого действия.');
@@ -382,31 +303,6 @@ function setupIpc() {
     sendApp('model:status', { online: false, runtime: 'lam-v1.0', engine: 'LamV1.0', baseUrl: '', models: [], checking: true });
     setImmediate(() => checkModelRuntime().catch((error) => emitAgent({ type: 'runtime-error', message: error.message || String(error) })));
     return normalized;
-  });
-
-  ipcMain.handle('api-key:test', async (event, payload) => {
-    requireAppSender(event);
-    const providerId = String(payload?.provider || '');
-    const apiKey = String(payload?.apiKey || '').trim() || await (await getVault()).get(['providers', providerId, 'key'], '');
-    return testProvider(providerId, apiKey);
-  });
-
-  ipcMain.handle('api-key:save', async (event, payload) => {
-    requireAppSender(event);
-    const providerId = String(payload?.provider || '');
-    providerInfo(providerId);
-    const key = String(payload?.apiKey || '').trim();
-    if (key.length < 8 || key.length > 5000) throw new Error('API-ключ пустой или имеет недопустимую длину.');
-    const vault = await getVault();
-    await vault.set(['providers', providerId], { key, model: String(payload?.model || '').slice(0, 160), savedAt: new Date().toISOString() });
-    return getIntegrationStatus();
-  });
-
-  ipcMain.handle('api-key:remove', async (event, providerId) => {
-    requireAppSender(event);
-    providerInfo(String(providerId || ''));
-    await (await getVault()).remove(['providers', String(providerId)]);
-    return getIntegrationStatus();
   });
 
   ipcMain.handle('connectors:github', async (event, payload) => {
@@ -435,10 +331,24 @@ function setupIpc() {
     return getIntegrationStatus();
   });
 
+  ipcMain.handle('connectors:telegram', async (event, payload) => {
+    requireAppSender(event);
+    const credentials = { token: String(payload?.token || '').trim(), chatId: String(payload?.chatId || '').trim() };
+    const identity = await testTelegram(credentials);
+    await (await getVault()).set(['connectors', 'telegram'], {
+      botToken: credentials.token,
+      chatId: identity.chatId,
+      botUsername: identity.botUsername,
+      chatName: identity.chatName,
+      connectedAt: new Date().toISOString(),
+    });
+    return getIntegrationStatus();
+  });
+
   ipcMain.handle('connectors:disconnect', async (event, connectorId) => {
     requireAppSender(event);
     const id = String(connectorId || '');
-    if (['github', 'google', 'instagram'].includes(id)) await (await getVault()).remove(['connectors', id]);
+    if (['github', 'google', 'instagram', 'telegram'].includes(id)) await (await getVault()).remove(['connectors', id]);
     else if (id.startsWith('mcp-')) {
       const serverId = id.slice(4);
       const config = await getConfig();
@@ -674,26 +584,11 @@ function setupIpc() {
     return { attachments, errors };
   });
 
-  ipcMain.handle('browser:open', async (event, url) => {
+  ipcMain.handle('external:open', async (event, value) => {
     requireAppSender(event);
-    return openBrowser(url || 'https://duckduckgo.com');
-  });
-
-  ipcMain.handle('browser:navigate', async (event, value) => {
-    requireBrowserSender(event);
-    if (!browserView || browserView.webContents.isDestroyed()) throw new Error('Браузер закрыт.');
-    const url = await assertPublicHttpUrl(normalizeBrowserAddress(value));
-    await browserView.webContents.loadURL(url.href);
+    const url = await assertPublicHttpUrl(String(value || ''));
+    await shell.openExternal(url.href);
     return true;
-  });
-  ipcMain.handle('browser:back', (event) => { requireBrowserSender(event); if (browserView?.webContents.canGoBack()) browserView.webContents.goBack(); });
-  ipcMain.handle('browser:forward', (event) => { requireBrowserSender(event); if (browserView?.webContents.canGoForward()) browserView.webContents.goForward(); });
-  ipcMain.handle('browser:reload', (event) => { requireBrowserSender(event); browserView?.webContents.reload(); });
-  ipcMain.handle('browser:open-external', async (event) => {
-    requireBrowserSender(event);
-    const current = browserView?.webContents.getURL() || '';
-    if (!/^https?:\/\//i.test(current)) throw new Error('Нет безопасного веб-адреса для открытия.');
-    await shell.openExternal(current);
   });
 
   ipcMain.handle('memory:clear', async (event) => {
@@ -758,17 +653,14 @@ function setupIpc() {
       if (status.github?.connected) allConnectedIds.push('github');
       if (status.google?.connected) allConnectedIds.push('google');
       if (status.instagram?.connected) allConnectedIds.push('instagram');
+      if (status.telegram?.connected) allConnectedIds.push('telegram');
       for (const server of config.mcpServers.filter((item) => item.enabled)) allConnectedIds.push(server.id);
       const selectedConnectorIds = project ? allConnectedIds : [...new Set((Array.isArray(payload?.connectorIds) ? payload.connectorIds : []).map(String))].filter((id) => allConnectedIds.includes(id));
-      const selectedProviderIds = project
-        ? Object.entries(status.providers || {}).filter(([, connected]) => connected).map(([id]) => id)
-        : [...new Set((Array.isArray(payload?.providerIds) ? payload.providerIds : []).map(String))].filter((id) => status.providers?.[id]);
       const modelRuntime = await getLocalisEngine().start();
       if (!modelRuntime.online || !modelRuntime.baseUrl) throw new Error(modelRuntime.error || 'LamV1.0 не запущена.');
       const runConfig = {
         ...config,
         modelBaseUrl: modelRuntime.baseUrl,
-        cloudFallbackEnabled: Boolean(config.cloudFallbackEnabled && selectedProviderIds.includes(config.fallbackProvider)),
       };
       const directTools = await availableConnectorTools(vault, selectedConnectorIds);
       const connectorNames = [];
@@ -776,7 +668,6 @@ function setupIpc() {
         const item = status[id];
         connectorNames.push(`${item?.name || item?.account || id}${item?.account ? ` (${item.account})` : ''}`);
       }
-      for (const id of selectedProviderIds) connectorNames.push(`${PROVIDERS[id]?.name || id} API`);
 
       const mcpToolDefinitions = [];
       const mcpToolMap = new Map();
@@ -802,14 +693,11 @@ function setupIpc() {
         }
       }
       const allAgents = [...agents, ...BUILTIN_PLUGINS.map((plugin) => ({ ...plugin, enabled: config.enabledPluginIds.includes(plugin.id) }))];
-      const providerKey = async (providerId) => selectedProviderIds.includes(providerId) ? vault.get(['providers', String(providerId), 'key'], '') : '';
-      const providerModel = async (providerId) => vault.get(['providers', String(providerId), 'model'], '');
       const runOutput = await runAgentTurn(payload, {
-        signal: controller.signal, workspaceRoot, config: runConfig, project, memory, agents: allAgents, plugins, providerIds: selectedProviderIds,
+        signal: controller.signal, workspaceRoot, config: runConfig, project, memory, agents: allAgents, plugins,
         connectorNames, connectorTools: [...directTools, ...mcpToolDefinitions], attachmentsById: attachmentMap,
         plugins: [...plugins, ...BUILTIN_PLUGINS],
-        emit: emitAgent, requestApproval, openBrowser,
-        getProviderKey: providerKey, providerModel,
+        emit: emitAgent, requestApproval,
         executeConnectorTool: (name, args, signal) => executeConnectorTool(name, args, { vault, signal }),
         callMcpTool: async (name, args, signal) => {
           const entry = mcpToolMap.get(name);
@@ -820,19 +708,6 @@ function setupIpc() {
           const target = allAgents.find((agent) => agent.enabled && (agent.id === agentId || agent.name.toLowerCase() === agentId.toLowerCase()));
           if (!target) throw new Error(`Активный агент «${agentId}» не найден. Включите его в настройках → Агенты.`);
           return runLocalSubagent({ baseUrl: runConfig.modelBaseUrl, instructions: target.instructions, task, signal });
-        },
-        askSpecialist: async (providerId, task, signal) => {
-          const key = await providerKey(providerId);
-          if (!key) throw new Error(`Для ${providerId} не сохранён API-ключ. Откройте настройки → API.`);
-          const provider = providerInfo(providerId);
-          const specialistMemory = String(sharedMemory.summary || '').slice(-2500);
-          return callProvider({
-            providerId, apiKey: key, model: await providerModel(providerId), signal,
-            messages: [
-              { role: 'system', content: `Ты — внешний specialist-консультант для Localis. Дай конкретное решение, явно укажи риски и то, что нужно проверить. Не утверждай, что выполнил локальные действия.${specialistMemory ? `\nОбщая локальная сводка пользователя:\n${specialistMemory}` : ''}` },
-              { role: 'user', content: task },
-            ],
-          });
         },
         addMemory: async (note) => {
           const current = await getMemory();

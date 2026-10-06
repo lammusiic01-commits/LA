@@ -5,7 +5,6 @@ const path = require('node:path');
 const { normalizeLocalServiceUrl, isLoopbackHost, isPrivateIp } = require('./security');
 const net = require('node:net');
 const { BUILTIN_PLUGINS } = require('./plugins');
-const { PROVIDERS } = require('./providers');
 
 const LOCAL_MODEL_ID = 'lam-v1.0';
 
@@ -22,8 +21,6 @@ function defaultConfig(documentsPath) {
     uiLanguage: 'ru',
     theme: 'midnight',
     approvalMode: 'ask',
-    cloudFallbackEnabled: false,
-    fallbackProvider: 'openai',
     enabledPluginIds: BUILTIN_PLUGINS.map((plugin) => plugin.id),
     mcpServers: [],
   };
@@ -56,7 +53,6 @@ function validateConfig(input, documentsPath) {
   const provider = ['automatic1111', 'comfyui'].includes(input?.imageProvider) ? input.imageProvider : defaults.imageProvider;
   const imageEndpoint = normalizeLocalServiceUrl(input?.imageEndpoint || defaults.imageEndpoint, defaults.imageEndpoint);
   const temperature = Number(input?.temperature);
-  const providerId = String(input?.fallbackProvider || defaults.fallbackProvider);
   const enabledPluginIds = Array.isArray(input?.enabledPluginIds)
     ? [...new Set(input.enabledPluginIds.map((id) => String(id).slice(0, 80)))].slice(0, 100)
     : defaults.enabledPluginIds;
@@ -77,8 +73,6 @@ function validateConfig(input, documentsPath) {
     uiLanguage,
     theme,
     approvalMode,
-    cloudFallbackEnabled: Boolean(input?.cloudFallbackEnabled),
-    fallbackProvider: PROVIDERS[providerId] ? providerId : defaults.fallbackProvider,
     enabledPluginIds,
     mcpServers: normalizeMcpServers(input?.mcpServers),
   };

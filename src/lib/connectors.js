@@ -1,13 +1,13 @@
 'use strict';
 
 const { assertPublicHttpUrl } = require('./security');
-const { PROVIDERS, callProvider } = require('./providers');
 
 const GRAPH_API_VERSION = 'v26.0';
 const CONNECTOR_CATALOG = Object.freeze([
   { id: 'github', name: 'GitHub', kind: 'direct', category: 'Разработка', description: 'Репозитории, файлы, поиск и issues через GitHub REST API.' },
   { id: 'google', name: 'Google Workspace', kind: 'oauth', category: 'Офис', description: 'Drive, Gmail и Calendar через Google OAuth.' },
   { id: 'instagram', name: 'Instagram', kind: 'direct', category: 'Соцсети', description: 'Профиль, публикации, статистика и публикация через Instagram Graph API.' },
+  { id: 'telegram', name: 'Telegram bot', kind: 'direct', category: 'Сообщения', description: 'Отправка сообщений через ваш Telegram bot token и сохранённый chat ID.' },
   { id: 'notion', name: 'Notion', kind: 'mcp', category: 'Рабочее пространство', description: 'Подключение официального или community MCP-сервера.' },
   { id: 'slack', name: 'Slack', kind: 'mcp', category: 'Коммуникации', description: 'Подключение MCP-сервера Slack с выданными вами правами.' },
   { id: 'google-calendar', name: 'Google Calendar', kind: 'oauth', category: 'Офис', description: 'Календарь Google в общем OAuth-подключении Google Workspace.' },
@@ -37,6 +37,7 @@ const CONNECTOR_TOOL_DEFINITIONS = Object.freeze([
   tool('instagram_list_media', 'Список последних публикаций подключённого Instagram Business/Creator аккаунта.', { type: 'object', properties: { limit: { type: 'integer' } } }),
   tool('instagram_get_insights', 'Получение доступной статистики подключённого Instagram Business/Creator аккаунта.', { type: 'object', properties: { period: { type: 'string', enum: ['day', 'week', 'days_28'] } } }),
   tool('instagram_publish_image', 'Публикация фотографии из публичного HTTPS URL в Instagram. Изменение внешнего сервиса.', { type: 'object', properties: { image_url: { type: 'string' }, caption: { type: 'string' } }, required: ['image_url', 'caption'] }),
+  tool('telegram_send_message', 'Отправить текст в Telegram-чат, указанный пользователем в настройках. Внешнее сообщение; всегда требует разрешения в текущем режиме доступа.', { type: 'object', properties: { text: { type: 'string', description: 'Текст сообщения, максимум 4096 символов.' } }, required: ['text'] }),
 ]);
 
 function tool(name, description, parameters) { return { type: 'function', function: { name, description, parameters } }; }
@@ -284,39 +285,90 @@ async function executeInstagramTool(name, args, connector, signal) {
   throw new Error(`Неизвестный Instagram-инструмент «${name}».`);
 }
 
+function validateTelegramCredentials(token, chatId) {
+  const safeToken = String(token || '').trim();
+  const safeChatId = String(chatId || '').trim();
+  if (!/^\d{5,15}:[A-Za-z0-9_-]{20,100}$/.test(safeToken)) throw new Error('Bot token имеет неверный формат. Получите токен у официального @BotFather.');
+  if (!/^(?:-?\d{1,20}|@[A-Za-z0-9_]{5,32})$/.test(safeChatId)) throw new Error('Chat ID должен быть числовым ID чата или @username канала.');
+  return { token: safeToken, chatId: safeChatId };
+}
+
+async function telegramRequest(token, method, parameters = {}, { signal, fetchImpl = fetch } = {}) {
+  const endpoint = new URL(`/bot${token}/${method}`, 'https://api.telegram.org');
+  let response;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: 'POST', redirect: 'error', signal,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(parameters),
+    });
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason || error;
+    throw new Error('Не удалось связаться с Telegram. Проверьте интернет-соединение и попробуйте ещё раз.');
+  }
+  const raw = await response.text();
+  let payload;
+  try { payload = JSON.parse(raw); } catch { throw new Error(`Telegram вернул некорректный ответ (HTTP ${response.status}).`); }
+  if (!response.ok || payload?.ok !== true) {
+    const description = String(payload?.description || response.statusText || 'запрос отклонён').replace(/bot\d{5,15}:[A-Za-z0-9_-]+/g, '[bot token]').slice(0, 300);
+    throw new Error(`Telegram API: ${description} (HTTP ${response.status}).`);
+  }
+  return payload.result;
+}
+
+async function testTelegram({ token, chatId }, options = {}) {
+  const credentials = validateTelegramCredentials(token, chatId);
+  const bot = await telegramRequest(credentials.token, 'getMe', {}, options);
+  const chat = await telegramRequest(credentials.token, 'getChat', { chat_id: credentials.chatId }, options);
+  return {
+    connected: true,
+    botUsername: String(bot.username || ''),
+    chatId: String(chat.id || credentials.chatId),
+    chatName: String(chat.title || chat.username || [chat.first_name, chat.last_name].filter(Boolean).join(' ') || credentials.chatId),
+  };
+}
+
+async function executeTelegramTool(name, args, connector, signal) {
+  if (name !== 'telegram_send_message') throw new Error(`Неизвестный Telegram-инструмент «${name}».`);
+  const { token, chatId } = validateTelegramCredentials(connector?.botToken, connector?.chatId);
+  const text = clean(args.text, 'text', 4096);
+  const result = await telegramRequest(token, 'sendMessage', { chat_id: chatId, text, disable_web_page_preview: true }, { signal });
+  return { sent: true, messageId: result.message_id, chatId: String(result.chat?.id || chatId), textLength: text.length };
+}
+
 async function executeConnectorTool(name, args, context) {
   const githubToken = await context.vault.get(['connectors', 'github', 'token'], '');
   const google = await context.vault.get(['connectors', 'google'], {});
   const instagram = await context.vault.get(['connectors', 'instagram'], {});
+  const telegram = await context.vault.get(['connectors', 'telegram'], {});
   if (name.startsWith('github_')) return executeGithubTool(name, args, githubToken, context.signal);
   if (name.startsWith('google_') || name.startsWith('gmail_')) return executeGoogleTool(name, args, context.vault, context.signal);
   if (name.startsWith('instagram_')) return executeInstagramTool(name, args, instagram, context.signal);
+  if (name.startsWith('telegram_')) return executeTelegramTool(name, args, telegram, context.signal);
   throw new Error(`Неизвестный connector tool «${name}».`);
 }
 
-async function availableConnectorTools(vault, selectedIds = ['github', 'google', 'instagram']) {
+async function availableConnectorTools(vault, selectedIds = ['github', 'google', 'instagram', 'telegram']) {
   const selected = new Set(Array.isArray(selectedIds) ? selectedIds : []);
-  const [github, google, instagram] = await Promise.all([
+  const [github, google, instagram, telegram] = await Promise.all([
     vault.get(['connectors', 'github', 'token'], ''),
     vault.get(['connectors', 'google'], {}),
     vault.get(['connectors', 'instagram'], {}),
+    vault.get(['connectors', 'telegram'], {}),
   ]);
   const ready = {
     github: selected.has('github') && Boolean(github),
     google: selected.has('google') && (Boolean(google?.refreshToken || google?.accessToken) || ['gmail', 'google-drive', 'google-calendar'].some((id) => selected.has(id))),
     instagram: selected.has('instagram') && Boolean(instagram?.token && instagram?.instagramUserId),
+    telegram: selected.has('telegram') && Boolean(telegram?.botToken && telegram?.chatId),
   };
-  return CONNECTOR_TOOL_DEFINITIONS.filter(({ function: fn }) => fn.name.startsWith('github_') ? ready.github : fn.name.startsWith('google_') || fn.name.startsWith('gmail_') ? ready.google : fn.name.startsWith('instagram_') ? ready.instagram : false);
-}
-
-async function testProvider(providerId, apiKey) {
-  const info = PROVIDERS[providerId];
-  if (!info) throw new Error('Неизвестный API-провайдер.');
-  const result = await callProvider({ providerId, apiKey, model: info.defaultModel, messages: [{ role: 'user', content: 'Reply with exactly: Localis connection OK' }], timeoutMs: 30_000 });
-  return { connected: true, model: result.model, reply: result.content.slice(0, 100) };
+  return CONNECTOR_TOOL_DEFINITIONS.filter(({ function: fn }) => fn.name.startsWith('github_') ? ready.github
+    : fn.name.startsWith('google_') || fn.name.startsWith('gmail_') ? ready.google
+      : fn.name.startsWith('instagram_') ? ready.instagram
+        : fn.name.startsWith('telegram_') ? ready.telegram : false);
 }
 
 module.exports = {
   CONNECTOR_CATALOG, CONNECTOR_TOOL_DEFINITIONS, GRAPH_API_VERSION,
-  availableConnectorTools, executeConnectorTool, getGoogleAccessToken, testGithub, testInstagram, testProvider,
+  availableConnectorTools, executeConnectorTool, getGoogleAccessToken, testGithub, testInstagram, testTelegram, validateTelegramCredentials,
 };

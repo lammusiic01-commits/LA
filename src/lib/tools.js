@@ -25,13 +25,6 @@ const TOOL_DEFINITIONS = [
   },
   {
     type: 'function', function: {
-      name: 'open_browser',
-      description: 'Open a public website in the app’s isolated desktop browser. Use read_webpage to bring readable page text back into the answer.',
-      parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
-    },
-  },
-  {
-    type: 'function', function: {
       name: 'list_workspace_files',
       description: 'List files in the selected Localis workspace. Pass a relative folder path, or an empty string for the root; an absolute path is allowed only after the user enabled Full access.',
       parameters: { type: 'object', properties: { directory: { type: 'string' } } },
@@ -116,13 +109,6 @@ const TOOL_DEFINITIONS = [
   },
   {
     type: 'function', function: {
-      name: 'ask_specialist',
-      description: 'Send a focused task to a configured cloud AI provider for a second opinion. This transmits the task and selected context to that provider and requires approval.',
-      parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['openai', 'deepseek', 'openrouter', 'xai'] }, task: { type: 'string' } }, required: ['provider', 'task'] },
-    },
-  },
-  {
-    type: 'function', function: {
       name: 'remember',
       description: 'Save a short preference or fact to Localis local memory for future chats. This does not train or alter model weights and requires user approval.',
       parameters: { type: 'object', properties: { note: { type: 'string', description: 'One useful, non-sensitive note to remember.' } }, required: ['note'] },
@@ -150,7 +136,6 @@ function summarizeTool(name, args, workspaceRoot) {
   switch (name) {
     case 'web_search': return `Поиск в интернете · ${safeString(args.query, 'query', 400)}`;
     case 'read_webpage': return `Чтение публичной страницы · ${safeString(args.url, 'url', 2000)}`;
-    case 'open_browser': return `Открытие сайта в изолированном браузере · ${safeString(args.url, 'url', 2000)}`;
     case 'list_workspace_files': return `Список файлов в папке · ${String(args.directory || 'корень рабочей папки')}`;
     case 'read_workspace_file': return `Чтение файла · ${safeString(args.path, 'path', 500)}`;
     case 'write_workspace_file': return `Запись текстового файла · ${safeString(args.path, 'path', 500)}\nРазмер содержимого: ${String(args.content || '').length.toLocaleString('ru-RU')} символов`;
@@ -160,8 +145,8 @@ function summarizeTool(name, args, workspaceRoot) {
     case 'run_command': return `ЗАПУСК КОМАНДЫ (без системной песочницы)\nРабочая папка: ${String(args.directory || workspaceRoot)}\n${safeString(args.command, 'command', 6000)}`;
     case 'analyze_data_file': return `Локальный анализ набора данных · ${safeString(args.path, 'path', 500)}`;
     case 'delegate_to_agent': return `Локальная консультация агента ${safeString(args.agent_id, 'agent_id', 120)} · ${safeString(args.task, 'task', 1000)}`;
-    case 'ask_specialist': return `Передача задачи внешнему AI-провайдеру ${String(args.provider || '').slice(0, 40)} · ${safeString(args.task, 'task', 1000)}`;
     case 'remember': return `Сохранение локальной заметки в памяти Localis\n${safeString(args.note, 'note', 1500)}`;
+    case 'telegram_send_message': return `Отправка сообщения в Telegram\n${safeString(args.text, 'text', 4096).slice(0, 700)}${String(args.text || '').length > 700 ? '…' : ''}`;
     default: return `Неизвестный инструмент: ${name}`;
   }
 }
@@ -175,18 +160,13 @@ function safeEnvironment() {
 }
 
 async function executeTool(name, args, context) {
-  const { workspaceRoot, config, signal, openBrowser, addMemory, fullAccess = false } = context;
+  const { workspaceRoot, config, signal, addMemory, fullAccess = false } = context;
   switch (name) {
     case 'web_search':
       return searchWeb(safeString(args.query, 'query', 400), { signal });
     case 'read_webpage': {
       const url = await assertPublicHttpUrl(safeString(args.url, 'url', 2000));
       return readWebpage(url.href, { signal });
-    }
-    case 'open_browser': {
-      const url = await assertPublicHttpUrl(safeString(args.url, 'url', 2000));
-      await openBrowser(url.href);
-      return { opened: url.href, note: 'Страница открыта в изолированном браузере Localis.' };
     }
     case 'list_workspace_files':
       return listWorkspaceFiles(workspaceRoot, String(args.directory || '').trim(), { allowOutside: fullAccess });
@@ -214,14 +194,11 @@ async function executeTool(name, args, context) {
     case 'delegate_to_agent':
       if (typeof context.delegateAgent !== 'function') throw new Error('Вызов specialist agent недоступен.');
       return context.delegateAgent(safeString(args.agent_id, 'agent_id', 120), safeString(args.task, 'task', 6000), signal);
-    case 'ask_specialist':
-      if (typeof context.askSpecialist !== 'function') throw new Error('Внешний AI-провайдер не настроен.');
-      return context.askSpecialist(safeString(args.provider, 'provider', 40), safeString(args.task, 'task', 12_000), signal);
     case 'remember':
       return addMemory(safeString(args.note, 'note', 1500));
     default:
       if (name.startsWith('mcp__') && typeof context.callMcpTool === 'function') return context.callMcpTool(name, args, signal);
-      if (/^(github_|google_|gmail_|instagram_)/.test(name) && typeof context.executeConnectorTool === 'function') return context.executeConnectorTool(name, args, signal);
+      if (/^(github_|google_|gmail_|instagram_|telegram_)/.test(name) && typeof context.executeConnectorTool === 'function') return context.executeConnectorTool(name, args, signal);
       throw new Error(`Неизвестный инструмент «${name}».`);
   }
 }

@@ -76,4 +76,12 @@ class SecretVault {
   }
 }
 
-module.exports = { SecretVault };
+async function removeLegacyProviderCredentials(vault) {
+  if (!vault || typeof vault.get !== 'function' || typeof vault.remove !== 'function') throw new TypeError('Ожидается совместимое защищённое хранилище.');
+  const previousProviders = await vault.get(['providers'], null);
+  if (!previousProviders || typeof previousProviders !== 'object' || Array.isArray(previousProviders)) return false;
+  await vault.remove(['providers']);
+  return true;
+}
+
+module.exports = { SecretVault, removeLegacyProviderCredentials };

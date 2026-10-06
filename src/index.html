@@ -40,6 +40,7 @@
         </button>
       </div>
     </aside>
+    <div class="panel-resizer" id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Изменить ширину боковой панели" aria-controls="sidebar" tabindex="0" title="Перетащите, чтобы изменить ширину панели"></div>
 
     <main class="main-panel">
       <header class="topbar">
@@ -48,7 +49,7 @@
           <span class="project-mode-pill" id="project-mode-pill" hidden>◧ <span id="project-mode-name"></span></span>
           <button class="connection-pill" id="connection-pill" title="Проверить или запустить LamV1.0"><span class="connection-dot"></span><span id="connection-label">Запуск LamV1.0…</span><span class="pill-chevron">⌄</span></button>
           <div class="model-select-wrap"><span class="model-spark">✦</span><select id="model-select" aria-label="Единственная локальная модель LamV1.0" disabled><option value="lam-v1.0">LamV1.0 · Qwen3 4B Q4_K_M</option></select><span class="select-chevron">⌄</span></div>
-          <button class="top-action" id="browser-open" title="Открыть встроенный браузер"><span>◎</span><span>Браузер</span></button>
+          <button class="top-action arena-open" id="arena-open" title="Открыть Arena Agent Mode вручную в системном браузере"><span>↗</span><span>Arena.ai</span></button>
           <button class="top-action activity-toggle" id="activity-toggle" title="Показать, что делает агент"><span>◷</span><span>Активность</span></button>
           <button class="icon-button settings-icon" id="settings-open-top" title="Настройки" aria-label="Настройки">⚙</button>
         </div>
@@ -81,8 +82,8 @@
           <button class="connector-chip" data-settings-tab="connectors" data-connector="github"><span class="connector-github">●</span> GitHub</button>
           <button class="connector-chip" data-settings-tab="connectors" data-connector="google"><span class="connector-google">G</span> Google</button>
           <button class="connector-chip" data-settings-tab="connectors" data-connector="instagram"><span class="connector-instagram">◎</span> Instagram</button>
-          <select id="chat-provider-select" class="connector-provider-select" aria-label="Выбрать AI-провайдера"></select>
-          <button class="connector-chip" id="chat-provider-toggle" title="Включить AI-провайдера в этом чате"><span>✦</span> API: выкл.</button>
+          <button class="connector-chip" data-settings-tab="connectors" data-connector="telegram"><span class="connector-telegram">➤</span> Telegram</button>
+
           <button class="connector-chip" id="composer-connectors"><span>＋</span> Все</button>
           <button class="connector-chip connector-plugin-chip" id="composer-plugins"><span>✦</span> Plugins</button>
         </div>
@@ -99,10 +100,11 @@
             <div class="composer-right"><span class="privacy-label"><span class="privacy-lock">⌑</span> Локально по умолчанию</span><span class="enter-hint">Enter · отправить</span><button class="send-button" id="send-button" aria-label="Отправить сообщение" title="Отправить"><span class="send-arrow">↑</span></button></div>
           </div>
         </div>
-        <div class="composer-footnote">Облачные AI-провайдеры, внешние сервисы и локальные файлы используются только согласно выбранным настройкам доступа.</div>
+        <div class="composer-footnote">Ответы создаёт LamV1.0 локально; web-поиск, подключения и файловые действия подчиняются выбранным разрешениям.</div>
       </footer>
     </main>
 
+    <div class="panel-resizer activity-resizer" id="activity-resizer" role="separator" aria-orientation="vertical" aria-label="Изменить ширину панели активности" aria-controls="activity-sidebar" tabindex="0" title="Перетащите, чтобы изменить ширину панели активности"></div>
     <aside class="activity-sidebar" id="activity-sidebar" aria-label="Активность Localis">
       <div class="activity-header">
         <div><div class="activity-kicker">LOCALIS RUNTIME</div><h2>Активность</h2></div>
@@ -136,7 +138,6 @@
       <div class="settings-layout">
         <nav class="settings-tabs" aria-label="Разделы настроек">
           <button class="settings-tab active" data-settings-tab="general">◈ <span>Общие</span></button>
-          <button class="settings-tab" data-settings-tab="api">✦ <span>API провайдеры</span></button>
           <button class="settings-tab" data-settings-tab="connectors">↗ <span>Коннекторы</span><b id="connected-count">0</b></button>
           <button class="settings-tab" data-settings-tab="plugins">▤ <span>Plugins</span></button>
           <button class="settings-tab" data-settings-tab="agents">◎ <span>Агенты</span></button>
@@ -155,29 +156,22 @@
             </div>
             <label class="check-row"><input type="checkbox" id="setting-reduced-motion"><span><strong>Экономия ресурсов и меньше анимаций</strong><small>Оставляет интерфейс отзывчивым во время инференса и снижает визуальные эффекты.</small></span></label>
             <div class="field-help">Отрисовка следует частоте обновления Windows-дисплея и достигает 120 Гц/кадров в секунду, если монитор и система поддерживают 120 Гц. Localis не разгоняет частоту экрана и не держит скрытое окно активным.</div>
-            <label class="check-row"><input type="checkbox" id="self-learning-enabled"><span><strong>Локальное обучение на опыте</strong><small>Сохранять краткие, очищенные от ключей итоги завершённых задач в папке памяти и подмешивать похожие примеры в будущие запросы. Веса модели не меняются.</small></span></label>
+            <label class="check-row"><input type="checkbox" id="self-learning-enabled"><span><strong>Локальная память опыта</strong><small>По желанию сохранять очищенные от секретов итоги диалогов и использовать подходящие заметки позже. Это retrieval-контекст, не дообучение и не изменение весов LamV1.0.</small></span></label>
             <label class="field-label" for="approval-mode">Разрешения инструментов</label>
             <select id="approval-mode" class="wide-select"><option value="ask">Спрашивать перед каждым действием</option><option value="full">Полный доступ · без повторных вопросов</option></select>
-            <div class="access-warning" id="full-access-warning"><strong>⚠ Полный доступ — опасный режим</strong><p>После отдельного системного подтверждения Localis сможет автоматически работать с любыми файлами, выполнять команды с правами вашей учётной записи, использовать подключения и облачные API. Переключатель не создаёт песочницу; использовать только если вы осознаёте риск.</p></div>
+            <div class="access-warning" id="full-access-warning"><strong>⚠ Полный доступ — опасный режим</strong><p>После отдельного системного подтверждения Localis сможет автоматически работать с выбранными файлами, выполнять команды с правами вашей учётной записи и обращаться к включённым подключениям/интернету. Переключатель не создаёт песочницу; использовать только если вы осознаёте риск.</p></div>
             <label class="field-label" for="model-runtime-result">Локальная модель LamV1.0</label>
             <div class="field-with-action"><div class="workspace-path" id="model-runtime-result">Модель входит в комплект Localis.</div><button class="button-secondary compact" id="check-model-button">Проверить / запустить</button></div>
             <div class="field-help">Единственный локальный backend — LamV1.0 на базе открытых весов Qwen3-4B-Instruct-2507 Q4_K_M. C++-launcher подбирает профиль CPU/GPU, llama.cpp выполняет инференс. Параметры модели не обучаются; локальная память не является fine-tuning.</div>
             <label class="field-label" for="image-provider">Локальный генератор изображений <span>необязательно</span></label>
             <div class="settings-grid"><select id="image-provider"><option value="automatic1111">AUTOMATIC1111 / Forge API</option><option value="comfyui">ComfyUI API</option></select><input id="image-endpoint" type="url" spellcheck="false" placeholder="http://127.0.0.1:7860"></div>
-            <div class="field-help">Сервис должен быть запущен на этом компьютере. Для AUTOMATIC1111 нужен параметр запуска <code>--api</code>; ComfyUI обычно слушает порт 8188.</div>
+            <div class="field-help">Это отдельные локальные генераторы. Встроенная LamV1.0 сама не генерирует изображения/видео. Arena.ai можно открыть вручную; Localis не управляет сайтом скрытно.</div>
             <label class="field-label">Рабочая папка <span>по умолчанию для чатов</span></label>
             <div class="field-with-action"><div class="workspace-path" id="settings-workspace">…</div><button class="button-secondary compact" id="choose-workspace">Выбрать</button></div>
-            <label class="check-row"><input type="checkbox" id="cloud-fallback-enabled"><span><strong>Использовать подключённый облачный AI как резерв</strong><small>Перед отправкой переписки провайдеру Localis спросит подтверждение, если не включён полный доступ.</small></span></label>
-            <label class="field-label" for="fallback-provider">Резервный AI-провайдер</label><select id="fallback-provider" class="wide-select"></select>
-          </section>
-
-          <section class="settings-panel" data-settings-panel="api">
-            <div class="panel-intro"><h3>API провайдеры</h3><p>Ключи хранятся в отдельном Windows DPAPI-зашифрованном файле. Переход в облако отправляет только выбранную задачу и контекст.</p></div>
-            <div id="provider-list" class="provider-list"></div>
           </section>
 
           <section class="settings-panel" data-settings-panel="connectors">
-            <div class="panel-intro"><h3>Коннекторы и интеграции</h3><p>Каталог включает сервисы из Manus integrations. Поддерживаемые API работают напрямую; остальные подключаются реальным MCP-сервером.</p></div>
+            <div class="panel-intro"><h3>Коннекторы и интеграции</h3><p>Ключи облачных AI-моделей удалены; Localis использует только LamV1.0 локально. Из ключей, относящихся к AI-чату, здесь остаются Telegram bot token и chat ID. У GitHub, Google, Instagram и MCP свои отдельные учётные данные для соответствующих сервисов.</p></div>
             <div id="connector-catalog" class="connector-catalog"></div>
             <div class="connector-config-card">
               <div class="connector-card-heading"><div><strong>GitHub</strong><small id="github-status">Не подключён</small></div><span class="connector-github">●</span></div>
@@ -198,6 +192,18 @@
               <label class="field-label" for="instagram-user-id">Instagram User ID</label><input id="instagram-user-id" autocomplete="off" placeholder="ID Business / Creator аккаунта">
               <div class="field-help">Нужен профессиональный Business/Creator аккаунт, связанная Facebook Page и права Meta API. Для публикации: instagram_business_content_publish; личные аккаунты API не поддерживаются.</div>
               <div class="card-actions"><button class="button-secondary compact" data-disconnect="instagram">Отключить</button><button class="button-primary compact" id="instagram-connect">Проверить и подключить</button></div>
+            </div>
+            <div class="connector-config-card telegram-config-card">
+              <div class="connector-card-heading"><div><strong>Telegram bot</strong><small id="telegram-status">Не подключён</small></div><span class="connector-telegram">➤</span></div>
+              <label class="field-label" for="telegram-token">Bot API token · только ваш бот</label><input id="telegram-token" type="password" autocomplete="new-password" placeholder="Получите у @BotFather">
+              <label class="field-label" for="telegram-chat-id">Chat ID или @username канала</label><input id="telegram-chat-id" autocomplete="off" placeholder="Например, -1001234567890">
+              <div class="field-help">Token хранится только в зашифрованном хранилище ОС. Бот должен быть добавлен в чат/канал; в режиме Ask перед отправкой показываются чат и полный текст, а Full access действует согласно общему предупреждению.</div>
+              <div class="card-actions"><button class="button-secondary compact" data-disconnect="telegram">Отключить</button><button class="button-primary compact" id="telegram-connect">Проверить и сохранить</button></div>
+            </div>
+            <div class="connector-config-card arena-notice">
+              <div class="connector-card-heading"><div><strong>Arena.ai Agent Mode</strong><small>Ручной переход · без сохранения Google-пароля</small></div><span class="arena-mark">A</span></div>
+              <div class="field-help">Arena.ai Terms запрещают доступ программными и автоматизированными средствами. Поэтому Localis не будет незаметно входить, загружать файлы, отправлять запросы или скачивать результаты с Arena. Открыть Agent Mode можно вручную; публичный интернет Localis читает собственными web-инструментами.</div>
+              <div class="card-actions"><button class="button-primary compact" id="arena-open-settings">Открыть Arena.ai Agent Mode</button></div>
             </div>
             <div class="connector-config-card mcp-config-card">
               <div class="connector-card-heading"><div><strong>Любой MCP Streamable HTTP сервер</strong><small>Notion · Slack · Stripe · HubSpot · Hugging Face · Zapier · GitHub MCP и свой</small></div><span class="mcp-mark">M</span></div>
@@ -229,7 +235,7 @@
             <div class="memory-file-note"><span>▤</span><div><strong>global-memory.json</strong><small>%APPDATA%\localis-ai\global-memory.json</small></div></div>
             <pre class="shared-memory-preview" id="shared-memory-preview">Общая сводка появится после первой задачи.</pre>
             <div class="memory-settings-row"><div><strong>Заметки и история памяти</strong><p id="memory-description">Сохранённые заметки не меняют веса модели.</p></div><button class="button-danger" id="clear-memory">Очистить заметки</button></div>
-            <div class="settings-privacy"><span>◈</span><div><strong>Локально, без обучения модели</strong><p>История и сводка не отправляются наружу, если только вы отдельно не одобрили cloud AI-вызов.</p></div></div>
+            <div class="settings-privacy"><span>◈</span><div><strong>Локальная память, фиксированные веса</strong><p>История и заметки остаются на устройстве. Интернет-страницы загружаются только вызванными web-инструментами; их текст считается недоверенным.</p></div></div>
           </section>
         </div>
       </div>
