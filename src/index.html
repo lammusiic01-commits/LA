@@ -44,7 +44,30 @@
 
     <main class="main-panel">
       <header class="topbar">
-        <div class="topbar-left"><button class="icon-button menu-button" id="sidebar-open" aria-label="Открыть меню">☰</button><div class="crumb"><span>Рабочее пространство</span><span class="crumb-slash">/</span><strong id="active-title">Новый диалог</strong></div></div>
+        <div class="topbar-left">
+          <button class="icon-button menu-button" id="sidebar-open" aria-label="Открыть список диалогов" title="Список диалогов">☰</button>
+          <div class="app-menu-wrap">
+            <button class="app-menu-toggle" id="app-menu-toggle" type="button" aria-label="Меню приложения" aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu" title="Открыть меню приложения">
+              <span class="app-menu-symbol" aria-hidden="true">⋯</span><span class="app-menu-label">Меню</span><span class="app-menu-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div class="app-menu" id="app-menu" role="menu" aria-label="Меню приложения" hidden>
+              <div class="app-menu-heading">РАБОЧАЯ СРЕДА</div>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="new-chat"><span class="app-menu-item-icon" aria-hidden="true">＋</span><span>Новый диалог</span><kbd>Ctrl K</kbd></button>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="create-project"><span class="app-menu-item-icon" aria-hidden="true">▧</span><span>Создать проект</span></button>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="create-folder"><span class="app-menu-item-icon" aria-hidden="true">▱</span><span>Создать папку</span></button>
+              <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="open-workspace"><span class="app-menu-item-icon" aria-hidden="true">↗</span><span>Открыть рабочую папку</span></button>
+              <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="activity"><span class="app-menu-item-icon" aria-hidden="true">◷</span><span>Панель активности</span></button>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="connectors"><span class="app-menu-item-icon" aria-hidden="true">⌘</span><span>Подключения</span></button>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="memory"><span class="app-menu-item-icon" aria-hidden="true">✧</span><span>Общая память</span></button>
+              <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="settings"><span class="app-menu-item-icon" aria-hidden="true">⚙</span><span>Настройки</span></button>
+            </div>
+          </div>
+          <span class="topbar-divider" role="separator" aria-orientation="vertical"></span>
+          <div class="crumb"><span>Рабочее пространство</span><span class="crumb-slash">/</span><strong id="active-title">Новый диалог</strong></div>
+        </div>
         <div class="topbar-actions">
           <span class="project-mode-pill" id="project-mode-pill" hidden>◧ <span id="project-mode-name"></span></span>
           <button class="connection-pill" id="connection-pill" title="Проверить или запустить LamV1.0"><span class="connection-dot"></span><span id="connection-label">Запуск LamV1.0…</span><span class="pill-chevron">⌄</span></button>

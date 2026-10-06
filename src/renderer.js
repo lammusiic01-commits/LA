@@ -4,6 +4,8 @@ const $ = (selector) => document.querySelector(selector);
 const api = window.localis;
 const view = {
   sidebar: $('#sidebar'),
+  appMenuToggle: $('#app-menu-toggle'),
+  appMenu: $('#app-menu'),
   conversationList: $('#conversation-list'),
   welcome: $('#welcome-screen'),
   messageList: $('#message-list'),
@@ -1099,10 +1101,54 @@ function setActivityPanelVisible(visible) {
   else view.appShell.classList.toggle('activity-hidden', !visible);
 }
 
+function getAppMenuItems() {
+  return [...view.appMenu.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+}
+
+function setAppMenuOpen(open, { focusFirst = false, restoreFocus = false } = {}) {
+  view.appMenu.hidden = !open;
+  view.appMenuToggle.setAttribute('aria-expanded', String(open));
+  if (open && focusFirst) getAppMenuItems()[0]?.focus();
+  else if (!open && restoreFocus) view.appMenuToggle.focus();
+}
+
 function bindEvents() {
   bindPanelResizer(view.sidebarResizer, 'sidebar');
   bindPanelResizer(view.activityResizer, 'activity');
   window.addEventListener('resize', applyPanelLayout);
+  const appMenuActions = {
+    'new-chat': () => $('#new-chat').click(),
+    'create-project': () => openCreateDialog('project'),
+    'create-folder': () => openCreateDialog('folder'),
+    'open-workspace': () => $('#open-workspace').click(),
+    activity: () => $('#activity-toggle').click(),
+    connectors: () => openSettings('connectors'),
+    memory: () => openSettings('memory'),
+    settings: () => openSettings('general'),
+  };
+  view.appMenuToggle.addEventListener('click', () => setAppMenuOpen(view.appMenu.hidden, { focusFirst: view.appMenu.hidden }));
+  view.appMenu.addEventListener('click', (event) => {
+    const item = event.target.closest('[data-app-action]');
+    if (!item || !view.appMenu.contains(item)) return;
+    setAppMenuOpen(false, { restoreFocus: true });
+    appMenuActions[item.dataset.appAction]?.();
+  });
+  view.appMenu.addEventListener('keydown', (event) => {
+    const items = getAppMenuItems();
+    const current = items.indexOf(document.activeElement);
+    if (!items.length) return;
+    let next = null;
+    if (event.key === 'ArrowDown') next = (current + 1 + items.length) % items.length;
+    else if (event.key === 'ArrowUp') next = (current - 1 + items.length) % items.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = items.length - 1;
+    if (next !== null) { event.preventDefault(); items[next].focus(); }
+  });
+  view.appMenu.addEventListener('focusout', () => {
+    requestAnimationFrame(() => {
+      if (!view.appMenu.hidden && !view.appMenu.contains(document.activeElement) && document.activeElement !== view.appMenuToggle) setAppMenuOpen(false);
+    });
+  });
   $('#new-chat').addEventListener('click', () => {
     state.activeId = null; pendingConnectorIds = [];
     render(); scheduleSave(); view.input.focus(); view.sidebar.classList.remove('open');
@@ -1329,13 +1375,15 @@ function bindEvents() {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); $('#new-chat').click(); }
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); sendMessage(); }
     if (event.key === 'Escape') {
-      if (activeApproval) answerApproval(false);
+      if (!view.appMenu.hidden) setAppMenuOpen(false, { restoreFocus: true });
+      else if (activeApproval) answerApproval(false);
       else if (!view.settingsBackdrop.hidden) closeSettings();
       else if (!view.createBackdrop.hidden) view.createBackdrop.hidden = true;
       else { view.sidebar.classList.remove('open'); setActivityPanelVisible(false); }
     }
   });
   document.addEventListener('click', (event) => {
+    if (!view.appMenu.hidden && !view.appMenu.contains(event.target) && !view.appMenuToggle.contains(event.target)) setAppMenuOpen(false);
     const link = event.target.closest('a[data-external-link]');
     if (!link) return;
     event.preventDefault(); api.openExternal(link.getAttribute('href')).catch((error) => showToast(error.message, 'error'));
