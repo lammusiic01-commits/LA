@@ -16,7 +16,8 @@ test('project and folder creation support Unicode names and keep paths inside th
   const { project, projects } = await createWorkspaceProject(root, 'Мой проект', 'Собрать сайт-портфолио', []);
   assert.equal(project.slug, 'мой-проект');
   assert.equal(projectById(projects, project.id), project);
-  assert.equal(validateProjectRoot(root, project), project.path);
+  const canonicalRoot = await fs.realpath(root);
+  assert.equal(validateProjectRoot(canonicalRoot, project), project.path);
   assert.match(await fs.readFile(path.join(project.path, 'README.md'), 'utf8'), /Собрать сайт-портфолио/);
   assert.equal((await fs.readFile(path.join(project.path, '.localis-project.json'), 'utf8')).includes(project.id), true);
 
@@ -24,5 +25,5 @@ test('project and folder creation support Unicode names and keep paths inside th
   assert.equal(folder.slug, 'дизайн-система');
   assert.equal(path.dirname(folder.path), await fs.realpath(root));
   assert.throws(() => slugify('***'), /буквы или цифры/);
-  assert.throws(() => validateProjectRoot(root, { path: parent }), /workspace/);
+  assert.throws(() => validateProjectRoot(canonicalRoot, { path: parent }), /workspace/);
 });

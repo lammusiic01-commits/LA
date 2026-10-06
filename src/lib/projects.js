@@ -47,9 +47,7 @@ function validateProjectRoot(workspaceRoot, project) {
   if (!project || typeof project.path !== 'string' || !path.isAbsolute(project.path)) throw new Error('Проект не найден.');
   const root = path.resolve(workspaceRoot);
   const projectRoot = path.resolve(project.path);
-  if (!isPathInside(root, projectRoot) || projectRoot === root) {
-    throw new Error(`Папка проекта вышла за пределы workspace: root=${root}; project=${projectRoot}; relative=${path.relative(root, projectRoot)}`);
-  }
+  if (!isPathInside(root, projectRoot) || projectRoot === root) throw new Error('Папка проекта вышла за пределы workspace.');
   return projectRoot;
 }
 
