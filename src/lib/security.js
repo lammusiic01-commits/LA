@@ -143,8 +143,23 @@ function resolveWorkspacePath(workspaceRoot, candidate, { allowOutside = false }
   return target;
 }
 
+function normalizePathForContainment(value) {
+  let resolved = path.resolve(value);
+  if (process.platform === 'win32') {
+    const extendedPrefix = `${path.sep}${path.sep}?${path.sep}`;
+    const extendedUncPrefix = `${extendedPrefix}UNC${path.sep}`;
+    const lower = resolved.toLowerCase();
+    if (lower.startsWith(extendedUncPrefix.toLowerCase())) resolved = `${path.sep}${path.sep}${resolved.slice(extendedUncPrefix.length)}`;
+    else if (lower.startsWith(extendedPrefix.toLowerCase())) resolved = resolved.slice(extendedPrefix.length);
+    resolved = resolved.toLowerCase();
+  }
+  return resolved;
+}
+
 function isPathInside(root, candidate) {
-  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  const resolvedRoot = normalizePathForContainment(root);
+  const resolvedCandidate = normalizePathForContainment(candidate);
+  const relative = path.relative(resolvedRoot, resolvedCandidate);
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }
 

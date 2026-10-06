@@ -6,7 +6,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const {
-  assertPublicHttpUrl, isPrivateIp, normalizeLocalServiceUrl, resolveWorkspacePath,
+  assertPublicHttpUrl, isPathInside, isPrivateIp, normalizeLocalServiceUrl, resolveWorkspacePath,
 } = require('../src/lib/security');
 const { safeExistingPath, writeWorkspaceFile } = require('../src/lib/files');
 
@@ -23,6 +23,12 @@ test('public web URL validation rejects local addresses and unsafe protocols', a
   await assert.rejects(assertPublicHttpUrl('file:///C:/secret.txt'), /http/i);
   await assert.rejects(assertPublicHttpUrl('https://user:pass@example.com/'), /логин/i);
   assert.equal((await assertPublicHttpUrl('https://8.8.8.8/')).protocol, 'https:');
+});
+
+test('Windows workspace containment treats path casing consistently', { skip: process.platform !== 'win32' }, () => {
+  const root = 'C:/Users/RunnerAdmin/Temp/workspace';
+  assert.equal(isPathInside(root, 'c:/users/runneradmin/temp/WORKSPACE/project'), true);
+  assert.equal(isPathInside(root, 'C:/Users/RunnerAdmin/Temp/workspace-outside/file.txt'), false);
 });
 
 test('image services are restricted to loopback and paths stay in workspace', () => {
