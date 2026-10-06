@@ -1,7 +1,7 @@
 {
   "name": "localis-ai-desktop",
-  "version": "1.1.0",
-  "description": "Локальный desktop AI-агент поверх Ollama: браузер, инструменты и рабочая папка пользователя.",
+  "version": "1.2.0",
+  "description": "Localis with one bundled local AI model, LamV1.0, plus desktop tools and workspace.",
   "author": "Localis contributors",
   "main": "src/main.js",
   "private": true,
@@ -9,8 +9,9 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test",
-    "dist:win": "electron-builder --win nsis --publish never",
-    "dist:portable": "electron-builder --win portable --publish never"
+    "prepare:engine:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-windows-engine.ps1",
+    "package:win:app": "electron-builder --win dir --x64 --publish never",
+    "dist:win": "npm run prepare:engine:win && npm run package:win:app && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1"
   },
   "dependencies": {
     "docx": "^9.5.1",
@@ -39,20 +40,22 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "dir",
           "arch": [
             "x64"
           ]
         }
-      ],
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      ]
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
+    "extraResources": [
+      {
+        "from": "release-assets",
+        "to": "localis-bundle",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   },
   "overrides": {
     "image-size": "^2.0.4",

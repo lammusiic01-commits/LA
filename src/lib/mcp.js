@@ -87,7 +87,7 @@ function namespaceMcpTool(serverId, toolName) {
   return `mcp__${clean(serverId)}__${clean(toolName)}`;
 }
 
-function toOllamaTool(server, tool) {
+function toModelTool(server, tool) {
   const parameters = tool.inputSchema && typeof tool.inputSchema === 'object' ? tool.inputSchema : { type: 'object', properties: {} };
   const serialized = JSON.stringify(parameters);
   if (serialized.length > 12_000) throw new Error(`Схема инструмента MCP «${tool.name}» превышает лимит.`);
@@ -113,4 +113,4 @@ function buildMcpToolMap(servers, clientById) {
   return map;
 }
 
-module.exports = { HttpMcpClient, PROTOCOL_VERSION, buildMcpToolMap, extractJsonRpc, namespaceMcpTool, toOllamaTool };
+module.exports = { HttpMcpClient, PROTOCOL_VERSION, buildMcpToolMap, extractJsonRpc, namespaceMcpTool, toModelTool };

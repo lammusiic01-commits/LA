@@ -110,7 +110,7 @@ const TOOL_DEFINITIONS = [
   {
     type: 'function', function: {
       name: 'delegate_to_agent',
-      description: 'Ask an installed specialist agent or enabled built-in agent skill to independently plan or review a task. The same local Ollama model runs the specialist prompt.',
+      description: 'Ask an installed specialist agent or enabled built-in agent skill to independently plan or review a task. LamV1.0 runs the specialist prompt through the local OpenAI-compatible endpoint.',
       parameters: { type: 'object', properties: { agent_id: { type: 'string' }, task: { type: 'string' } }, required: ['agent_id', 'task'] },
     },
   },

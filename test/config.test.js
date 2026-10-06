@@ -5,6 +5,14 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { defaultConfig, normalizeMcpServers, validateConfig } = require('../src/lib/config');
 
+test('LamV1.0 is the only accepted local model alias', () => {
+  const documentsPath = path.join(path.sep, 'tmp', 'documents');
+  const defaults = defaultConfig(documentsPath);
+  const config = validateConfig({ ...defaults, model: 'arbitrary-model' }, documentsPath);
+  assert.equal(defaults.model, 'lam-v1.0');
+  assert.equal(config.model, 'lam-v1.0');
+});
+
 test('general settings preserve supported language, theme and permission modes', () => {
   const defaults = defaultConfig(path.join(path.sep, 'tmp', 'documents'));
   const config = validateConfig({

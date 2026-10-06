@@ -2,7 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { installGithubAgent, parseGithubRepository } = require('../src/lib/agents');
+const http = require('node:http');
+const { once } = require('node:events');
+const { installGithubAgent, parseGithubRepository, runLocalSubagent } = require('../src/lib/agents');
 
 function response(value, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
@@ -53,4 +55,33 @@ test('private GitHub repositories are rejected before reading skill files', asyn
     assertUrl: async (value) => new URL(value),
   }), /публичный/);
   assert.equal(calls, 1);
+});
+
+test('local specialist agents use only LamV1.0 through OpenAI-compatible chat completions', async (t) => {
+  let requestPayload;
+  let requestPath;
+  const server = http.createServer((request, result) => {
+    requestPath = request.url;
+    let body = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk) => { body += chunk; });
+    request.on('end', () => {
+      requestPayload = JSON.parse(body);
+      result.writeHead(200, { 'content-type': 'application/json' });
+      result.end(JSON.stringify({ choices: [{ message: { content: 'Review complete.' } }], model: 'lam-v1.0' }));
+    });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const result = await runLocalSubagent({
+    baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+    model: 'ignored-model', instructions: 'Review code.', task: 'Find the most important risk.',
+  });
+  assert.equal(requestPath, '/v1/chat/completions');
+  assert.equal(requestPayload.model, 'lam-v1.0');
+  assert.equal(requestPayload.stream, false);
+  assert.equal(requestPayload.messages[0].role, 'system');
+  assert.equal(requestPayload.messages[1].role, 'user');
+  assert.deepEqual(result, { agent: 'local-lamv1-subagent', model: 'lam-v1.0', content: 'Review complete.' });
 });

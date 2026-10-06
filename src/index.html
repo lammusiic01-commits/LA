@@ -36,7 +36,7 @@
         <button class="sidebar-nav-button" id="memory-button"><span class="sidebar-nav-icon">✧</span><span>Общая память</span><span class="memory-count" id="memory-count">0</span></button>
         <div class="local-note"><span class="local-indicator"></span><span>Локальные данные · зашифрованные ключи</span></div>
         <button class="user-profile" id="settings-open">
-          <span class="avatar">L</span><span class="profile-copy"><strong>Локальный агент</strong><small>Ollama · инструменты · агенты</small></span><span class="profile-more">⚙</span>
+          <span class="avatar">L</span><span class="profile-copy"><strong>Локальный агент</strong><small>LamV1.0 · память · инструменты</small></span><span class="profile-more">⚙</span>
         </button>
       </div>
     </aside>
@@ -46,8 +46,8 @@
         <div class="topbar-left"><button class="icon-button menu-button" id="sidebar-open" aria-label="Открыть меню">☰</button><div class="crumb"><span>Рабочее пространство</span><span class="crumb-slash">/</span><strong id="active-title">Новый диалог</strong></div></div>
         <div class="topbar-actions">
           <span class="project-mode-pill" id="project-mode-pill" hidden>◧ <span id="project-mode-name"></span></span>
-          <button class="connection-pill" id="connection-pill" title="Проверить подключение к Ollama"><span class="connection-dot"></span><span id="connection-label">Проверка Ollama…</span><span class="pill-chevron">⌄</span></button>
-          <div class="model-select-wrap"><span class="model-spark">✦</span><select id="model-select" aria-label="Выбрать модель"><option value="">Модель не найдена</option></select><span class="select-chevron">⌄</span></div>
+          <button class="connection-pill" id="connection-pill" title="Проверить или запустить LamV1.0"><span class="connection-dot"></span><span id="connection-label">Запуск LamV1.0…</span><span class="pill-chevron">⌄</span></button>
+          <div class="model-select-wrap"><span class="model-spark">✦</span><select id="model-select" aria-label="Единственная локальная модель LamV1.0" disabled><option value="lam-v1.0">LamV1.0 · Qwen3 4B Q4_K_M</option></select><span class="select-chevron">⌄</span></div>
           <button class="top-action" id="browser-open" title="Открыть встроенный браузер"><span>◎</span><span>Браузер</span></button>
           <button class="top-action activity-toggle" id="activity-toggle" title="Показать, что делает агент"><span>◷</span><span>Активность</span></button>
           <button class="icon-button settings-icon" id="settings-open-top" title="Настройки" aria-label="Настройки">⚙</button>
@@ -149,12 +149,19 @@
               <label><span class="field-label">Язык ответа агента</span><select id="setting-language"><option value="ru">Русский</option><option value="en">English</option><option value="lv">Latviešu</option></select></label>
               <label><span class="field-label">Цветовая тема</span><select id="setting-theme"><option value="midnight">Midnight blue</option><option value="graphite">Graphite</option><option value="forest">Forest</option><option value="light">Light</option></select></label>
             </div>
+            <div class="scale-control">
+              <label class="field-label" for="setting-ui-scale">Масштаб интерфейса <span id="ui-scale-value">100%</span></label>
+              <input id="setting-ui-scale" type="range" min="0.8" max="1.25" step="0.05" value="1" aria-label="Масштаб интерфейса">
+            </div>
+            <label class="check-row"><input type="checkbox" id="setting-reduced-motion"><span><strong>Экономия ресурсов и меньше анимаций</strong><small>Оставляет интерфейс отзывчивым во время инференса и снижает визуальные эффекты.</small></span></label>
+            <div class="field-help">Отрисовка следует частоте обновления Windows-дисплея и достигает 120 Гц/кадров в секунду, если монитор и система поддерживают 120 Гц. Localis не разгоняет частоту экрана и не держит скрытое окно активным.</div>
+            <label class="check-row"><input type="checkbox" id="self-learning-enabled"><span><strong>Локальное обучение на опыте</strong><small>Сохранять краткие, очищенные от ключей итоги завершённых задач в папке памяти и подмешивать похожие примеры в будущие запросы. Веса модели не меняются.</small></span></label>
             <label class="field-label" for="approval-mode">Разрешения инструментов</label>
             <select id="approval-mode" class="wide-select"><option value="ask">Спрашивать перед каждым действием</option><option value="full">Полный доступ · без повторных вопросов</option></select>
             <div class="access-warning" id="full-access-warning"><strong>⚠ Полный доступ — опасный режим</strong><p>После отдельного системного подтверждения Localis сможет автоматически работать с любыми файлами, выполнять команды с правами вашей учётной записи, использовать подключения и облачные API. Переключатель не создаёт песочницу; использовать только если вы осознаёте риск.</p></div>
-            <label class="field-label" for="ollama-url">Сервер Ollama <span>локально по умолчанию</span></label>
-            <div class="field-with-action"><input id="ollama-url" type="url" spellcheck="false" placeholder="http://127.0.0.1:11434"><button class="button-secondary compact" id="test-ollama">Проверить</button></div>
-            <div class="field-help" id="ollama-result">Если указать удалённый сервер, содержание чата будет отправляться на этот адрес.</div>
+            <label class="field-label" for="model-runtime-result">Локальная модель LamV1.0</label>
+            <div class="field-with-action"><div class="workspace-path" id="model-runtime-result">Модель входит в комплект Localis.</div><button class="button-secondary compact" id="check-model-button">Проверить / запустить</button></div>
+            <div class="field-help">Единственный локальный backend — LamV1.0 на базе открытых весов Qwen3-4B-Instruct-2507 Q4_K_M. C++-launcher подбирает профиль CPU/GPU, llama.cpp выполняет инференс. Параметры модели не обучаются; локальная память не является fine-tuning.</div>
             <label class="field-label" for="image-provider">Локальный генератор изображений <span>необязательно</span></label>
             <div class="settings-grid"><select id="image-provider"><option value="automatic1111">AUTOMATIC1111 / Forge API</option><option value="comfyui">ComfyUI API</option></select><input id="image-endpoint" type="url" spellcheck="false" placeholder="http://127.0.0.1:7860"></div>
             <div class="field-help">Сервис должен быть запущен на этом компьютере. Для AUTOMATIC1111 нужен параметр запуска <code>--api</code>; ComfyUI обычно слушает порт 8188.</div>

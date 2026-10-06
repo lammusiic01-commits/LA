@@ -2,7 +2,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-const AGENT_CHANNELS = new Set(['agent:event', 'agent:approval', 'ollama:status']);
+const AGENT_CHANNELS = new Set(['agent:event', 'agent:approval', 'model:status']);
 function subscribe(channel, callback) {
   if (!AGENT_CHANNELS.has(channel) || typeof callback !== 'function') return () => {};
   const listener = (_event, payload) => callback(payload);
@@ -14,7 +14,7 @@ contextBridge.exposeInMainWorld('localis', Object.freeze({
   getState: () => ipcRenderer.invoke('app:get-state'),
   saveState: (state) => ipcRenderer.invoke('app:save-state', state),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
-  checkOllama: () => ipcRenderer.invoke('ollama:check'),
+  checkModel: () => ipcRenderer.invoke('model:check'),
   chooseWorkspace: () => ipcRenderer.invoke('workspace:choose'),
   openWorkspace: () => ipcRenderer.invoke('workspace:open'),
   createWorkspaceFolder: (name) => ipcRenderer.invoke('workspace:create-folder', name),
@@ -44,5 +44,5 @@ contextBridge.exposeInMainWorld('localis', Object.freeze({
   connectMcp: (name, url, token) => ipcRenderer.invoke('mcp:connect', { name, url, token }),
   onAgentEvent: (callback) => subscribe('agent:event', callback),
   onApproval: (callback) => subscribe('agent:approval', callback),
-  onOllamaStatus: (callback) => subscribe('ollama:status', callback),
+  onModelStatus: (callback) => subscribe('model:status', callback),
 }));

@@ -1,6 +1,9 @@
 node_modules/
 release/
+release-assets/
 dist/
+build/
+
 coverage/
 *.log
 .DS_Store

@@ -4,7 +4,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const {
-  app, BrowserWindow, WebContentsView, dialog, ipcMain, shell, safeStorage,
+  app, BrowserWindow, WebContentsView, dialog, ipcMain, shell, safeStorage, screen,
 } = require('electron');
 app.setName('localis-ai');
 
@@ -16,11 +16,12 @@ const { listWorkspaceFiles } = require('./lib/files');
 const { SecretVault } = require('./lib/secrets');
 const { normalizeMemory, appendTurn, redactSensitive } = require('./lib/memory');
 const { BUILTIN_PLUGINS, installPluginFromUrl, normalizeImportedPlugin } = require('./lib/plugins');
-const { HttpMcpClient, buildMcpToolMap, toOllamaTool } = require('./lib/mcp');
+const { HttpMcpClient, buildMcpToolMap, toModelTool } = require('./lib/mcp');
 const { installGithubAgent, runLocalSubagent } = require('./lib/agents');
 const { createWorkspaceFolder, createWorkspaceProject, projectById, validateProjectRoot } = require('./lib/projects');
 const { CONNECTOR_CATALOG, availableConnectorTools, executeConnectorTool, testGithub, testInstagram, testProvider } = require('./lib/connectors');
 const { PROVIDERS, callProvider, providerInfo } = require('./lib/providers');
+const { LocalisEngine } = require('./lib/localis-engine');
 const { GOOGLE_SCOPES, startGoogleOAuth } = require('./lib/google-oauth');
 const { isPathInside } = require('./lib/security');
 
@@ -29,6 +30,7 @@ let browserWindow = null;
 let browserView = null;
 let configCache = null;
 let vaultCache = null;
+let localisEngine = null;
 const mcpClients = new Map();
 const activeRuns = new Map();
 const pendingApprovals = new Map();
@@ -42,6 +44,18 @@ const secretsPath = () => path.join(app.getPath('userData'), 'secrets.enc');
 const projectsPath = () => path.join(app.getPath('userData'), 'projects.json');
 const agentsPath = () => path.join(app.getPath('userData'), 'agents.json');
 const pluginsPath = () => path.join(app.getPath('userData'), 'plugins.json');
+
+function getLocalisEngine() {
+  if (!localisEngine) {
+    const assetRoot = app.isPackaged
+      ? path.join(process.resourcesPath, 'localis-bundle')
+      : path.resolve(process.env.LOCALIS_ASSET_ROOT || path.join(app.getAppPath(), 'release-assets'));
+    localisEngine = new LocalisEngine({ assetRoot });
+    localisEngine.on('ready', (status) => sendApp('model:status', status));
+    localisEngine.on('error-state', (message) => sendApp('model:status', { online: false, checking: false, runtime: 'lam-v1.0', engine: 'LamV1.0', models: [], error: message }));
+  }
+  return localisEngine;
+}
 
 function requireAppSender(event) {
   if (!mainWindow || event.sender !== mainWindow.webContents) throw new Error('Недоверенный источник IPC-запроса.');
@@ -123,45 +137,28 @@ async function getIntegrationStatus() {
   };
 }
 
-function withTimeout(ms, callback) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('Таймаут подключения.')), ms);
-  return { controller, done: () => clearTimeout(timer), callback };
-}
-
-async function checkOllama() {
-  const config = await getConfig();
-  const request = withTimeout(4000);
+async function checkModelRuntime() {
+  const engine = getLocalisEngine();
+  sendApp('model:status', { online: false, checking: true, runtime: 'lam-v1.0', engine: 'LamV1.0', baseUrl: '', models: [] });
   try {
-    const response = await fetch(new URL('/api/tags', `${config.ollamaBaseUrl.replace(/\/$/, '')}/`), { redirect: 'error', signal: request.controller.signal });
-    if (!response.ok) throw new Error(`Ollama ответила HTTP ${response.status}`);
-    const data = await response.json();
-    const models = Array.isArray(data.models) ? data.models.map((model) => ({
-      name: String(model.name || model.model || ''),
-      size: Number(model.size) || 0,
-      modifiedAt: model.modified_at || null,
-      family: model.details?.family || '',
-      parameterSize: model.details?.parameter_size || '',
-      quantization: model.details?.quantization_level || '',
-    })).filter((model) => model.name) : [];
-    const result = { online: true, baseUrl: config.ollamaBaseUrl, models, version: data.version || null };
-    sendApp('ollama:status', result);
-    return result;
+    return await engine.start();
   } catch (error) {
-    const result = { online: false, baseUrl: config.ollamaBaseUrl, models: [], error: error.name === 'AbortError' ? 'Ollama не ответила за 4 секунды.' : (error.message || 'Нет соединения с Ollama.') };
-    sendApp('ollama:status', result);
-    return result;
-  } finally {
-    request.done();
+    const status = await engine.status();
+    const failed = { ...status, online: false, checking: false, runtime: 'lam-v1.0', engine: 'LamV1.0', error: error.message || String(error) };
+    sendApp('model:status', failed);
+    return failed;
   }
 }
 
 function createMainWindow() {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const initialWidth = Math.min(1600, Math.round(workArea.width * 0.88));
+  const initialHeight = Math.min(1050, Math.round(workArea.height * 0.88));
   mainWindow = new BrowserWindow({
-    width: 1480,
-    height: 960,
-    minWidth: 1050,
-    minHeight: 700,
+    width: initialWidth,
+    height: initialHeight,
+    minWidth: Math.min(920, initialWidth),
+    minHeight: Math.min(620, initialHeight),
     backgroundColor: '#0d131c',
     title: 'Localis · локальный AI-агент',
     autoHideMenuBar: true,
@@ -179,6 +176,11 @@ function createMainWindow() {
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const expected = pathToFileURL(path.join(__dirname, 'index.html')).href;
     if (url !== expected) event.preventDefault();
+  });
+  mainWindow.webContents.once('did-finish-load', () => {
+    getConfig().then((config) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.setZoomFactor(config.uiScale || 1);
+    }).catch(() => {});
   });
   mainWindow.on('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
@@ -376,7 +378,9 @@ function setupIpc() {
     }
     await writeJsonAtomic(configPath(), normalized);
     configCache = normalized;
-    sendApp('ollama:status', { online: false, baseUrl: normalized.ollamaBaseUrl, models: [], checking: true });
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.setZoomFactor(normalized.uiScale || 1);
+    sendApp('model:status', { online: false, runtime: 'lam-v1.0', engine: 'LamV1.0', baseUrl: '', models: [], checking: true });
+    setImmediate(() => checkModelRuntime().catch((error) => emitAgent({ type: 'runtime-error', message: error.message || String(error) })));
     return normalized;
   });
 
@@ -617,9 +621,9 @@ function setupIpc() {
     return searchWeb(`${String(query || '').trim().slice(0, 250)} Localis agent skill plugin GitHub`, { signal: controller.signal });
   });
 
-  ipcMain.handle('ollama:check', (event) => {
+  ipcMain.handle('model:check', (event) => {
     requireAppSender(event);
-    return checkOllama();
+    return checkModelRuntime();
   });
 
   ipcMain.handle('workspace:choose', async (event) => {
@@ -759,7 +763,13 @@ function setupIpc() {
       const selectedProviderIds = project
         ? Object.entries(status.providers || {}).filter(([, connected]) => connected).map(([id]) => id)
         : [...new Set((Array.isArray(payload?.providerIds) ? payload.providerIds : []).map(String))].filter((id) => status.providers?.[id]);
-      const runConfig = { ...config, cloudFallbackEnabled: Boolean(config.cloudFallbackEnabled && selectedProviderIds.includes(config.fallbackProvider)) };
+      const modelRuntime = await getLocalisEngine().start();
+      if (!modelRuntime.online || !modelRuntime.baseUrl) throw new Error(modelRuntime.error || 'LamV1.0 не запущена.');
+      const runConfig = {
+        ...config,
+        modelBaseUrl: modelRuntime.baseUrl,
+        cloudFallbackEnabled: Boolean(config.cloudFallbackEnabled && selectedProviderIds.includes(config.fallbackProvider)),
+      };
       const directTools = await availableConnectorTools(vault, selectedConnectorIds);
       const connectorNames = [];
       for (const id of selectedConnectorIds) {
@@ -782,7 +792,7 @@ function setupIpc() {
             mcpClients.set(server.id, connection);
           }
           for (const tool of connection.tools) {
-            const definition = toOllamaTool(server, tool);
+            const definition = toModelTool(server, tool);
             mcpToolDefinitions.push(definition);
             mcpToolMap.set(definition.function.name, { client: connection.client, tool, server });
           }
@@ -809,7 +819,7 @@ function setupIpc() {
         delegateAgent: async (agentId, task, signal) => {
           const target = allAgents.find((agent) => agent.enabled && (agent.id === agentId || agent.name.toLowerCase() === agentId.toLowerCase()));
           if (!target) throw new Error(`Активный агент «${agentId}» не найден. Включите его в настройках → Агенты.`);
-          return runLocalSubagent({ baseUrl: config.ollamaBaseUrl, model: String(payload?.model || config.model || ''), instructions: target.instructions, task, signal });
+          return runLocalSubagent({ baseUrl: runConfig.modelBaseUrl, instructions: target.instructions, task, signal });
         },
         askSpecialist: async (providerId, task, signal) => {
           const key = await providerKey(providerId);
@@ -854,7 +864,7 @@ app.whenReady().then(() => {
   app.setAppUserModelId('ai.localis.desktop');
   setupIpc();
   createMainWindow();
-  checkOllama();
+  checkModelRuntime();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
@@ -863,6 +873,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   for (const run of activeRuns.values()) run.controller.abort(new Error('Приложение завершает работу.'));
   for (const settle of pendingApprovals.values()) settle(false);
+  if (localisEngine) localisEngine.stop().catch(() => {});
 });
 
 app.on('window-all-closed', () => {

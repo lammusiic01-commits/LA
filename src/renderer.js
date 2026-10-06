@@ -34,7 +34,7 @@ let providerCatalog = [];
 let integrationStatus = {};
 let pendingConnectorIds = [];
 let pendingProviderIds = [];
-let ollamaStatus = { online: false, models: [] };
+let modelStatus = { online: false, models: [] };
 let pendingAttachments = [];
 let activeRunId = null;
 let runtimeState = 'idle';
@@ -488,54 +488,40 @@ function drawAttachments() {
   }
 }
 
-function setOllamaStatus(status) {
-  ollamaStatus = status || { online: false, models: [] };
-  view.connection.classList.toggle('online', Boolean(ollamaStatus.online));
-  view.connection.classList.toggle('offline', !ollamaStatus.online && !ollamaStatus.checking);
-  if (ollamaStatus.online) view.connectionLabel.textContent = `Ollama · ${ollamaStatus.models.length} ${ollamaStatus.models.length === 1 ? 'модель' : 'моделей'}`;
-  else view.connectionLabel.textContent = ollamaStatus.checking ? 'Подключение…' : 'Ollama не найдена';
-  view.connection.title = ollamaStatus.online ? `Подключено: ${ollamaStatus.baseUrl}` : `${ollamaStatus.error || 'Запустите Ollama и проверьте адрес в настройках.'}`;
-
-  const selected = config.model || '';
-  view.modelSelect.replaceChildren();
-  if (ollamaStatus.online && ollamaStatus.models.length) {
-    for (const model of ollamaStatus.models) {
-      const option = document.createElement('option');
-      option.value = model.name;
-      const detail = [model.parameterSize, model.quantization].filter(Boolean).join(' · ');
-      option.textContent = detail ? `${model.name}  ·  ${detail}` : model.name;
-      view.modelSelect.append(option);
-    }
-    const exists = ollamaStatus.models.some((model) => model.name === selected);
-    const modelName = exists ? selected : ollamaStatus.models[0].name;
-    view.modelSelect.value = modelName;
-    view.modelSelect.disabled = false;
-    if (modelName !== selected) {
-      config.model = modelName;
-      if (initialized) persistSettings().catch(() => {});
-    }
-  } else {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = ollamaStatus.online ? 'Сначала загрузите модель' : 'Модель не найдена';
-    view.modelSelect.append(option);
-    view.modelSelect.disabled = true;
-  }
+function setModelStatus(status) {
+  modelStatus = status || { online: false, checking: false, models: [] };
+  view.connection.classList.toggle('online', Boolean(modelStatus.online));
+  view.connection.classList.toggle('offline', !modelStatus.online && !modelStatus.checking);
+  view.connectionLabel.textContent = modelStatus.online
+    ? 'LamV1.0 · готова'
+    : modelStatus.checking ? 'Запуск LamV1.0…' : 'LamV1.0 не запущена';
+  view.connection.title = modelStatus.online
+    ? `Подключено: ${modelStatus.engine || 'LamV1.0'} · ${modelStatus.baseUrl || 'локально'}`
+    : (modelStatus.error || 'Нажмите, чтобы запустить LamV1.0.');
+  config.model = 'lam-v1.0';
+  view.modelSelect.value = 'lam-v1.0';
+  view.modelSelect.disabled = true;
+  const runtimeLabel = $('#model-runtime-result');
+  if (runtimeLabel) runtimeLabel.textContent = modelStatus.online
+    ? 'LamV1.0 работает локально.'
+    : (modelStatus.checking ? 'Запускается встроенная модель…' : (modelStatus.error || 'Модель входит в комплект Localis.'));
+  const restartButton = $('#check-model-button');
+  if (restartButton) restartButton.disabled = Boolean(modelStatus.checking);
 }
 
-async function refreshOllama({ quiet = true } = {}) {
-  view.connectionLabel.textContent = 'Подключение…';
+async function refreshModelRuntime({ quiet = true } = {}) {
+  view.connectionLabel.textContent = 'Запуск LamV1.0…';
   view.connection.classList.remove('offline', 'online');
   try {
-    const status = await api.checkOllama();
-    setOllamaStatus(status);
-    if (!status.online && !quiet) showToast(`${status.error || 'Не удалось подключиться к Ollama.'} Запустите Ollama и нажмите «Проверить».`, 'error', 5200);
-    if (status.online && !status.models.length && !quiet) showToast('Ollama работает, но моделей не найдено. Загрузите модель через команду ollama pull.', 'error', 5200);
+    const status = await api.checkModel();
+    setModelStatus(status);
+    if (!status.online && !quiet) showToast(status.error || 'Не удалось запустить LamV1.0.', 'error', 7000);
     return status;
   } catch (error) {
-    setOllamaStatus({ online: false, models: [], error: error.message });
-    if (!quiet) showToast(error.message, 'error');
-    return { online: false, models: [] };
+    const status = { online: false, checking: false, models: [], runtime: 'lam-v1.0', engine: 'LamV1.0', error: error.message || String(error) };
+    setModelStatus(status);
+    if (!quiet) showToast(status.error, 'error');
+    return status;
   }
 }
 
@@ -597,7 +583,7 @@ function finishRun(runId) {
 function handleAgentEvent(event) {
   const context = runContexts.get(event.runId);
   if (event.type === 'run-start') {
-    runtimeState = 'running'; runtimeTitle = event.project ? `Работа над проектом · ${event.project}` : 'Агент выполняет задачу'; runtimeDescription = `Модель ${event.model || 'Ollama'} · наблюдайте за шагами ниже`;
+    runtimeState = 'running'; runtimeTitle = event.project ? `Работа над проектом · ${event.project}` : 'Агент выполняет задачу'; runtimeDescription = `Модель ${event.model || 'LamV1.0'} · наблюдайте за шагами ниже`;
     addActivity({ id: `run:${event.runId}`, label: runtimeTitle, details: runtimeDescription, status: 'running', kind: 'agent', runId: event.runId });
     renderActivity();
     return;
@@ -724,12 +710,15 @@ async function sendMessage() {
   if (!text && !pendingAttachments.length) return;
   const installCommand = text.match(/^install\s+github\s+(https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?)(?:\s*)$/i);
   if (installCommand && !pendingAttachments.length) { await runGithubInstallMessage(text, installCommand[1]); return; }
-  if (!ollamaStatus.online || !ollamaStatus.models.length) {
-    showToast('Сначала запустите Ollama с установленной моделью. Нажмите на статус вверху, чтобы проверить подключение.', 'error', 5200);
+  if (!modelStatus.online) {
+    showToast(modelStatus.error || 'Дождитесь запуска LamV1.0.', 'error', 6000);
     return;
   }
-  const model = view.modelSelect.value || config.model;
-  if (!model) { showToast('Выберите установленную модель Ollama.', 'error'); return; }
+  if (pendingAttachments.some((attachment) => attachment.kind === 'image')) {
+    showToast('LamV1.0 в этой сборке — текстовая модель; анализ изображений не поддерживается.', 'error', 6500);
+    return;
+  }
+  const model = 'lam-v1.0';
   let conversation = activeConversation();
   if (!conversation) conversation = makeConversation();
   const history = conversation.messages.filter((message) => ['user', 'assistant'].includes(message.role)).map((message) => ({ role: message.role, content: message.content || '' }));
@@ -823,6 +812,7 @@ const BUILTIN_PLUGIN_CARDS = [
 function applyTheme() {
   document.documentElement.dataset.theme = ['midnight', 'graphite', 'forest', 'light'].includes(config.theme) ? config.theme : 'midnight';
   document.documentElement.lang = ['ru', 'en', 'lv'].includes(config.uiLanguage) ? config.uiLanguage : 'ru';
+  document.documentElement.dataset.reduceMotion = config.reducedMotion ? 'true' : 'false';
 }
 
 function selectSettingsTab(tab = 'general') {
@@ -968,7 +958,15 @@ function updateMemoryPanel() {
 }
 
 function fillSettings() {
-  $('#ollama-url').value = config.ollamaBaseUrl || 'http://127.0.0.1:11434';
+  config.model = 'lam-v1.0';
+  $('#setting-ui-scale').value = String(config.uiScale || 1);
+  $('#ui-scale-value').textContent = `${Math.round(Number(config.uiScale || 1) * 100)}%`;
+  $('#setting-reduced-motion').checked = Boolean(config.reducedMotion);
+  $('#self-learning-enabled').checked = config.selfLearning !== false;
+  $('#model-runtime-result').textContent = modelStatus.online
+    ? 'LamV1.0 работает локально.'
+    : (modelStatus.error || 'Модель входит в комплект Localis.');
+  $('#check-model-button').disabled = Boolean(modelStatus.checking);
   $('#image-provider').value = config.imageProvider || 'automatic1111';
   $('#image-endpoint').value = config.imageEndpoint || (config.imageProvider === 'comfyui' ? 'http://127.0.0.1:8188' : 'http://127.0.0.1:7860');
   $('#settings-workspace').textContent = config.workspaceDirectory || '';
@@ -977,7 +975,6 @@ function fillSettings() {
   $('#approval-mode').value = config.approvalMode || 'ask';
   $('#full-access-warning').classList.toggle('visible', config.approvalMode === 'full');
   $('#cloud-fallback-enabled').checked = Boolean(config.cloudFallbackEnabled);
-  $('#ollama-result').textContent = 'Совместимо с локальным Ollama API. Удалённый сервер получает содержимое отправленных сообщений.';
   updateMemoryPanel();
   renderProviderSettings(); renderConnectorSettings(); renderPluginSettings(); renderAgentSettings();
 }
@@ -1086,8 +1083,12 @@ function bindEvents() {
   $('#settings-cancel').addEventListener('click', closeSettings);
   document.querySelectorAll('.settings-tab').forEach((button) => button.addEventListener('click', () => selectSettingsTab(button.dataset.settingsTab)));
   document.querySelectorAll('[data-settings-tab="connectors"][data-connector]').forEach((button) => button.addEventListener('dblclick', () => openSettings('connectors')));
+  $('#setting-ui-scale').addEventListener('input', (event) => { $('#ui-scale-value').textContent = `${Math.round(Number(event.target.value) * 100)}%`; });
   $('#settings-save').addEventListener('click', async () => {
-    config.ollamaBaseUrl = $('#ollama-url').value.trim();
+    config.model = 'lam-v1.0';
+    config.uiScale = Number($('#setting-ui-scale').value);
+    config.reducedMotion = $('#setting-reduced-motion').checked;
+    config.selfLearning = $('#self-learning-enabled').checked;
     config.imageProvider = $('#image-provider').value;
     config.imageEndpoint = $('#image-endpoint').value.trim();
     config.uiLanguage = $('#setting-language').value;
@@ -1096,7 +1097,7 @@ function bindEvents() {
     config.cloudFallbackEnabled = $('#cloud-fallback-enabled').checked;
     config.fallbackProvider = $('#fallback-provider').value;
     try {
-      await persistSettings(); render(); closeSettings(); await refreshOllama({ quiet: false });
+      await persistSettings(); render(); closeSettings(); await refreshModelRuntime({ quiet: false });
       showToast('Настройки сохранены на этом компьютере.', 'success');
     } catch (error) { showToast(error.message || 'Не удалось сохранить настройки.', 'error', 6000); }
   });
@@ -1109,17 +1110,24 @@ function bindEvents() {
     try { const selected = await api.chooseWorkspace(); if (selected) { config.workspaceDirectory = selected; $('#settings-workspace').textContent = selected; } }
     catch (error) { showToast(error.message, 'error'); }
   });
-  $('#test-ollama').addEventListener('click', async () => {
-    config.ollamaBaseUrl = $('#ollama-url').value.trim();
+  $('#check-model-button').addEventListener('click', async () => {
+    const button = $('#check-model-button');
+    button.disabled = true;
+    $('#model-runtime-result').textContent = 'Запускается встроенная модель…';
     try {
-      config = await api.saveSettings(config);
-      const status = await refreshOllama({ quiet: false });
-      $('#ollama-result').textContent = status.online ? `Подключено · установлено моделей: ${status.models.length}${status.version ? ` · Ollama ${status.version}` : ''}` : `${status.error || 'Нет соединения'}. Проверьте, что Ollama запущена.`;
-    } catch (error) { $('#ollama-result').textContent = error.message; showToast(error.message, 'error'); }
+      const status = await refreshModelRuntime({ quiet: false });
+      $('#model-runtime-result').textContent = status.online
+        ? `${status.engine || 'LamV1.0'} работает локально.`
+        : (status.error || 'Не удалось запустить LamV1.0.');
+    } catch (error) {
+      $('#model-runtime-result').textContent = error.message || String(error);
+      showToast(error.message || 'Не удалось запустить LamV1.0.', 'error');
+    } finally {
+      button.disabled = Boolean(modelStatus.checking);
+    }
   });
-  $('#model-select').addEventListener('change', async () => { config.model = view.modelSelect.value; try { await persistSettings(); } catch (error) { showToast(error.message, 'error'); } });
   $('#fallback-provider').addEventListener('change', () => { config.fallbackProvider = $('#fallback-provider').value; });
-  view.connection.addEventListener('click', () => refreshOllama({ quiet: false }));
+  view.connection.addEventListener('click', () => refreshModelRuntime({ quiet: false }));
   $('#browser-open').addEventListener('click', async () => { try { await api.openBrowser('https://duckduckgo.com'); } catch (error) { showToast(error.message || 'Не удалось открыть браузер.', 'error'); } });
   $('#open-workspace').addEventListener('click', async () => { try { await api.openWorkspace(); } catch (error) { showToast(error.message, 'error'); } });
   $('#memory-button').addEventListener('click', () => openSettings('memory'));
@@ -1284,7 +1292,7 @@ function bindEvents() {
   });
   api.onAgentEvent(handleAgentEvent);
   api.onApproval((approval) => { approvals.push(approval); if (!activeApproval) renderApproval(); });
-  api.onOllamaStatus(setOllamaStatus);
+  api.onModelStatus(setModelStatus);
 }
 
 async function bootstrap() {
@@ -1321,8 +1329,7 @@ async function bootstrap() {
     initialized = true;
     fillSettings();
     render();
-    const status = await refreshOllama({ quiet: true });
-    if (status.online && !status.models.length) showToast('Ollama запущена, но не видит загруженных моделей. В терминале выполните ollama list.', '');
+    await refreshModelRuntime({ quiet: true });
   } catch (error) {
     showToast(`Не удалось загрузить состояние приложения: ${error.message}`, 'error', 7000);
   }

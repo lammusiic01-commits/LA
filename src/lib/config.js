@@ -7,10 +7,14 @@ const net = require('node:net');
 const { BUILTIN_PLUGINS } = require('./plugins');
 const { PROVIDERS } = require('./providers');
 
+const LOCAL_MODEL_ID = 'lam-v1.0';
+
 function defaultConfig(documentsPath) {
   return {
-    ollamaBaseUrl: 'http://127.0.0.1:11434',
-    model: '',
+    model: LOCAL_MODEL_ID,
+    uiScale: 1,
+    reducedMotion: false,
+    selfLearning: true,
     workspaceDirectory: path.join(documentsPath, 'Localis Workspace'),
     imageProvider: 'automatic1111',
     imageEndpoint: 'http://127.0.0.1:7860',
@@ -49,10 +53,6 @@ function normalizeMcpServers(value) {
 
 function validateConfig(input, documentsPath) {
   const defaults = defaultConfig(documentsPath);
-  const ollamaRaw = String(input?.ollamaBaseUrl || defaults.ollamaBaseUrl).trim();
-  let ollamaUrl;
-  try { ollamaUrl = new URL(ollamaRaw); } catch { throw new Error('Адрес Ollama указан неверно.'); }
-  if (!['http:', 'https:'].includes(ollamaUrl.protocol) || ollamaUrl.username || ollamaUrl.password) throw new Error('Для Ollama укажите адрес http:// или https:// без пароля в URL.');
   const provider = ['automatic1111', 'comfyui'].includes(input?.imageProvider) ? input.imageProvider : defaults.imageProvider;
   const imageEndpoint = normalizeLocalServiceUrl(input?.imageEndpoint || defaults.imageEndpoint, defaults.imageEndpoint);
   const temperature = Number(input?.temperature);
@@ -63,10 +63,13 @@ function validateConfig(input, documentsPath) {
   const uiLanguage = ['ru', 'en', 'lv'].includes(input?.uiLanguage) ? input.uiLanguage : defaults.uiLanguage;
   const theme = ['midnight', 'graphite', 'forest', 'light'].includes(input?.theme) ? input.theme : defaults.theme;
   const approvalMode = ['ask', 'full'].includes(input?.approvalMode) ? input.approvalMode : defaults.approvalMode;
+  const uiScale = Number(input?.uiScale);
 
   return {
-    ollamaBaseUrl: ollamaUrl.origin.replace(/\/$/, ''),
-    model: String(input?.model || '').slice(0, 200),
+    model: LOCAL_MODEL_ID,
+    uiScale: Number.isFinite(uiScale) ? Math.min(1.25, Math.max(0.8, uiScale)) : defaults.uiScale,
+    reducedMotion: Boolean(input?.reducedMotion),
+    selfLearning: input?.selfLearning !== false,
     workspaceDirectory: path.resolve(String(input?.workspaceDirectory || defaults.workspaceDirectory)),
     imageProvider: provider,
     imageEndpoint,
@@ -96,4 +99,4 @@ async function writeJsonAtomic(filePath, value) {
   await fs.rename(tempPath, filePath);
 }
 
-module.exports = { defaultConfig, normalizeMcpServers, readJson, validateConfig, writeJsonAtomic };
+module.exports = { defaultConfig, LOCAL_MODEL_ID, normalizeMcpServers, readJson, validateConfig, writeJsonAtomic };

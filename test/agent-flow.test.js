@@ -6,12 +6,12 @@ const http = require('node:http');
 const { once } = require('node:events');
 const { runAgentTurn } = require('../src/lib/agent');
 
-function sendNdjson(response, chunk) {
-  response.writeHead(200, { 'content-type': 'application/x-ndjson' });
-  response.end(`${JSON.stringify(chunk)}\n`);
+function sendSse(response, chunks) {
+  response.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' });
+  response.end(`${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`);
 }
 
-test('agent asks for approval, executes an approved tool, and feeds its result back to Ollama', async (t) => {
+test('LamV1.0 streams OpenAI-compatible tool calls, requests approval, and consumes tool results', async (t) => {
   const requests = [];
   const server = http.createServer((request, response) => {
     let body = '';
@@ -19,17 +19,17 @@ test('agent asks for approval, executes an approved tool, and feeds its result b
     request.on('data', (chunk) => { body += chunk; });
     request.on('end', () => {
       const payload = JSON.parse(body);
-      requests.push(payload);
+      requests.push({ path: request.url, payload });
       if (requests.length === 1) {
-        sendNdjson(response, {
-          message: {
-            role: 'assistant', content: '',
-            tool_calls: [{ type: 'function', function: { name: 'remember', arguments: { note: 'Предпочитает короткие ответы на русском.' } } }],
-          },
-          done: true,
-        });
+        sendSse(response, [
+          { choices: [{ delta: { role: 'assistant', tool_calls: [{ index: 0, id: 'call-remember-1', type: 'function', function: { name: 'remember', arguments: '{"note":"Предпочитает короткие ответы на русском."}' } }] } }] },
+          { choices: [{ delta: {}, finish_reason: 'tool_calls' }] },
+        ]);
       } else {
-        sendNdjson(response, { message: { role: 'assistant', content: 'Запомнил предпочтение.', tool_calls: [] }, done: true });
+        sendSse(response, [
+          { choices: [{ delta: { role: 'assistant', content: 'Запомнил ' } }] },
+          { choices: [{ delta: { content: 'предпочтение.' }, finish_reason: 'stop' }] },
+        ]);
       }
     });
   });
@@ -42,11 +42,11 @@ test('agent asks for approval, executes an approved tool, and feeds its result b
   let savedNote = '';
   const controller = new AbortController();
   const output = await runAgentTurn({
-    runId: 'test-run-1234', model: 'mock-model', history: [], text: 'Запомни мой стиль ответа.', attachmentIds: [],
+    runId: 'test-run-1234', model: 'ignored-model', history: [], text: 'Запомни мой стиль ответа.', attachmentIds: [],
   }, {
     signal: controller.signal,
     workspaceRoot: '/tmp/localis-test-workspace',
-    config: { ollamaBaseUrl: `http://127.0.0.1:${address.port}`, model: 'mock-model', temperature: 0.2 },
+    config: { modelBaseUrl: `http://127.0.0.1:${address.port}/v1`, model: 'another-ignored-model', temperature: 0.2 },
     memory: [],
     attachmentsById: new Map(),
     emit: (event) => events.push(event),
@@ -60,7 +60,12 @@ test('agent asks for approval, executes an approved tool, and feeds its result b
   assert.equal(approvals[0].name, 'remember');
   assert.equal(savedNote, 'Предпочитает короткие ответы на русском.');
   assert.equal(requests.length, 2);
-  assert.ok(requests[1].messages.some((message) => message.role === 'tool' && message.tool_name === 'remember'));
+  assert.ok(requests.every((request) => request.path === '/v1/chat/completions'));
+  assert.ok(requests.every((request) => request.payload.model === 'lam-v1.0'));
+  assert.ok(requests.every((request) => request.payload.stream === true));
+  assert.ok(requests[0].payload.tools.some((tool) => tool.function.name === 'remember'));
+  assert.ok(requests[1].payload.messages.some((message) => message.role === 'assistant' && message.tool_calls?.[0]?.id === 'call-remember-1'));
+  assert.ok(requests[1].payload.messages.some((message) => message.role === 'tool' && message.tool_call_id === 'call-remember-1' && message.content.includes(savedNote)));
   assert.ok(events.some((event) => event.type === 'tool-running'));
   assert.ok(events.some((event) => event.type === 'turn-complete'));
 });
