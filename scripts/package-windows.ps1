@@ -1,6 +1,17 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
+function Get-Sha256Hex([string] $FilePath) {
+  $algorithm = [System.Security.Cryptography.SHA256]::Create()
+  $stream = [System.IO.File]::OpenRead($FilePath)
+  try {
+    return [System.BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $stream.Dispose()
+    $algorithm.Dispose()
+  }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $package = Get-Content -LiteralPath (Join-Path $repoRoot 'package.json') -Raw | ConvertFrom-Json
 $version = [string]$package.version
@@ -80,7 +91,7 @@ try {
   foreach ($file in $installedFiles) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Installer smoke test did not find bundled asset: $file" }
   }
-  $installedModel = (Get-FileHash -LiteralPath $installedFiles[3] -Algorithm SHA256).Hash.ToLowerInvariant()
+  $installedModel = Get-Sha256Hex $installedFiles[3]
   if ($installedModel -ne ([string]$manifest.modelSha256).ToLowerInvariant()) { throw 'Installed LamV1.0 model SHA-256 does not match the pinned manifest.' }
 } finally {
   $uninstaller = Join-Path $smokeInstall 'unins000.exe'

@@ -44,7 +44,10 @@ jobs:
           $url = 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe'
           $expected = '9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732'
           Invoke-WebRequest -Uri $url -OutFile $installer
-          $actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          $algorithm = [System.Security.Cryptography.SHA256]::Create()
+          $stream = [System.IO.File]::OpenRead($installer)
+          try { $actual = [System.BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+          finally { $stream.Dispose(); $algorithm.Dispose() }
           if ($actual -ne $expected) { throw "Inno Setup SHA-256 mismatch: $actual" }
           $installDir = Join-Path $env:RUNNER_TEMP 'Inno Setup 6.7.3'
           $arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /DIR=`"$installDir`""

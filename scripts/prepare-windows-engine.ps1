@@ -19,11 +19,22 @@ $modelRevision = '18727206c51467496bfba014368bd0a30e97f411'
 $modelUrl = "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/$modelRevision/Qwen3-4B-Instruct-2507-Q4_K_M.gguf?download=true"
 $modelSha256 = '3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597'
 
+function Get-Sha256Hex([string] $FilePath) {
+  $algorithm = [System.Security.Cryptography.SHA256]::Create()
+  $stream = [System.IO.File]::OpenRead($FilePath)
+  try {
+    return [System.BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $stream.Dispose()
+    $algorithm.Dispose()
+  }
+}
+
 function Invoke-VerifiedDownload([string] $Url, [string] $Destination, [string] $ExpectedSha256) {
   Write-Host "Downloading $Url"
   & curl.exe --fail --location --retry 4 --retry-all-errors --connect-timeout 30 --output $Destination $Url
   if ($LASTEXITCODE -ne 0) { throw "Download failed with curl exit code ${LASTEXITCODE}: $Url" }
-  $actual = (Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash.ToLowerInvariant()
+  $actual = Get-Sha256Hex $Destination
   if ($actual -ne $ExpectedSha256.ToLowerInvariant()) {
     throw "SHA-256 mismatch for $Destination. Expected $ExpectedSha256, got $actual."
   }
