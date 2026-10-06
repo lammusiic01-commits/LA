@@ -87,6 +87,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Localis-Windows
-          path: release/Localis-Setup-*.exe
+          path: |
+            release/Localis-Setup-*.exe
+            release/Localis-Setup-*.exe.sha256
           if-no-files-found: error
           retention-days: 14

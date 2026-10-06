@@ -105,4 +105,12 @@ try {
   if (Test-Path -LiteralPath $smokeInstall) { Remove-Item -LiteralPath $smokeInstall -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
+$installerSha256 = Get-Sha256Hex $output
+$checksumPath = "$output.sha256"
+[System.IO.File]::WriteAllText($checksumPath, "$installerSha256`r`n", [System.Text.Encoding]::ASCII)
+if ((Get-Content -LiteralPath $checksumPath -Raw).Trim() -ne $installerSha256) {
+  throw 'Installer SHA-256 sidecar validation failed.'
+}
+Write-Host "Installer SHA-256: $installerSha256"
+Write-Host "Installer SHA-256 sidecar created: $checksumPath"
 Write-Host "Self-contained Windows installer built and installation-verified: $output ($([math]::Round($installerBytes / 1GB, 2)) GiB)."

@@ -22,6 +22,9 @@ test('Windows distribution stages LamV1.0 assets before creating one self-contai
   assert.match(installerScript, /DiskSpanning=no/);
   assert.match(installerScript, /AppId=ai\.localis\.desktop/);
   assert.match(packageScript, /Installed LamV1\.0 model SHA-256/);
+  assert.match(packageScript, /\$installerSha256 = Get-Sha256Hex \$output/);
+  assert.match(packageScript, /WriteAllText\(\$checksumPath/);
+  assert.match(workflow, /release\/Localis-Setup-\*\.exe\.sha256/);
   assert.match(prepareScript, /modelSha256/);
   assert.match(prepareScript, /localis-engine\.exe/);
 });
