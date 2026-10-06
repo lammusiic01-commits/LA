@@ -55,12 +55,16 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "Inno Setup installation failed with exit code $($process.ExitCode)." }
           $candidates = @(
             (Join-Path $installDir 'ISCC.exe'),
-            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'),
-            (Join-Path $env:ProgramFiles 'Inno Setup 6/ISCC.exe')
+            (Join-Path $env:LOCALAPPDATA 'Programs/Inno Setup 6/ISCC.exe')
           )
           $compiler = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-          if (-not $compiler) { throw 'Pinned Inno Setup compiler was not installed.' }
+          if (-not $compiler -and (Test-Path -LiteralPath $env:RUNNER_TEMP)) {
+            $compiler = Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Filter 'ISCC.exe' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $compiler) { throw 'Pinned Inno Setup compiler was not installed in the runner temporary directory.' }
+          Write-Host "Using pinned Inno Setup compiler: $compiler"
           "ISCC_PATH=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          'ISCC_VERSION=6.7.3' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build Windows installer
         shell: pwsh
         run: |

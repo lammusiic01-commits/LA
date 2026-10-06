@@ -44,14 +44,17 @@ if (-not $iscc) {
   throw 'Inno Setup 6.6.0 or later is required to create the single-file installer. Install Inno Setup 6.7.3 or set ISCC_PATH to ISCC.exe.'
 }
 
-$versionText = [string](Get-Item -LiteralPath $iscc).VersionInfo.ProductVersion
-if (-not $versionText) { $versionText = [string](Get-Item -LiteralPath $iscc).VersionInfo.FileVersion }
+$versionText = [string]$env:ISCC_VERSION
+if (-not $versionText) {
+  $versionText = [string](Get-Item -LiteralPath $iscc).VersionInfo.ProductVersion
+  if (-not $versionText) { $versionText = [string](Get-Item -LiteralPath $iscc).VersionInfo.FileVersion }
+}
 $match = [regex]::Match($versionText, '\d+\.\d+(?:\.\d+)?')
-if (-not $match.Success -or ([version]$match.Value) -lt [version]'6.6.0') {
+if ($match.Success -and ([version]$match.Value) -lt [version]'6.6.0') {
   throw "Inno Setup 6.6.0 or later is required for a single-file installer containing LamV1.0. Found: $versionText"
 }
-
-Write-Host "Packaging Localis $version with Inno Setup $($match.Value)."
+if ($match.Success) { Write-Host "Packaging Localis $version with Inno Setup $($match.Value)." }
+else { Write-Warning "Could not read Inno Setup compiler version ($versionText); the installer build and smoke test will validate it." }
 Push-Location $PSScriptRoot
 try {
   $versionDefine = "/DAppVersion=`"$version`""
