@@ -236,7 +236,7 @@ async function makeVideo(workspaceRoot, args, signal, { allowOutside = false } =
     '-map', '[outv]', '-an', '-c:v', 'libx264', '-r', '30', '-pix_fmt', 'yuv420p',
     '-movflags', '+faststart', '-y', outputPath,
   );
-  const result = await runProcess('ffmpeg', commandArgs, { cwd: workspaceRoot, timeoutMs: 5 * 60_000, signal });
+  const result = await runProcess('ffmpeg', commandArgs, { cwd: root, timeoutMs: 5 * 60_000, signal });
   const stat = await fs.stat(outputPath);
   return { path: path.relative(root, outputPath).split(path.sep).join('/'), size: stat.size, frames: inputs.length, seconds: inputs.length * duration, log: result.output.slice(-1500) };
 }
