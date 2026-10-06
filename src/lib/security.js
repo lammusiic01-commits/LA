@@ -159,8 +159,9 @@ function normalizePathForContainment(value) {
 function isPathInside(root, candidate) {
   const resolvedRoot = normalizePathForContainment(root);
   const resolvedCandidate = normalizePathForContainment(candidate);
-  const relative = path.relative(resolvedRoot, resolvedCandidate);
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  if (resolvedCandidate === resolvedRoot) return true;
+  const rootPrefix = resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`;
+  return resolvedCandidate.startsWith(rootPrefix);
 }
 
 module.exports = {
