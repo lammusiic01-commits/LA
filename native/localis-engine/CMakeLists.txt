@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.22)
+project(LocalisEngine VERSION 1.0.0 LANGUAGES CXX)
+
+if(NOT WIN32)
+  message(FATAL_ERROR "The packaged Localis Engine launcher is currently built for Windows x64.")
+endif()
+
+add_executable(localis-engine main.cpp)
+target_compile_features(localis-engine PRIVATE cxx_std_17)
+target_compile_definitions(localis-engine PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+if(MSVC)
+  target_compile_options(localis-engine PRIVATE /W4 /permissive- /utf-8)
+  set_property(TARGET localis-engine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+set_target_properties(localis-engine PROPERTIES OUTPUT_NAME "localis-engine")

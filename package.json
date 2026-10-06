@@ -1,0 +1,68 @@
+{
+  "name": "localis-ai-desktop",
+  "version": "1.2.1",
+  "description": "Localis with one bundled local AI model, LamV1.0, plus desktop tools and workspace.",
+  "author": "Localis contributors",
+  "main": "src/main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "prepare:engine:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-windows-engine.ps1",
+    "package:win:app": "electron-builder --win dir --x64 --publish never",
+    "dist:win": "npm run prepare:engine:win && npm run package:win:app && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows.ps1"
+  },
+  "dependencies": {
+    "docx": "^9.5.1",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.17.2",
+    "pptxgenjs": "^3.12.0"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "ai.localis.desktop",
+    "productName": "Localis",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "README.md",
+      "LICENSE",
+      "!src/**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "extraResources": [
+      {
+        "from": "release-assets",
+        "to": "localis-bundle",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  },
+  "overrides": {
+    "image-size": "^2.0.4",
+    "uuid": "^11.1.1",
+    "@electron/get": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ru" data-theme="midnight">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d131c">
+  <title>Localis · локальный AI workspace</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="brand-copy"><strong>localis</strong><small>LOCAL AI WORKSPACE</small></div>
+        <button class="icon-button collapse-button" id="sidebar-close" title="Свернуть меню" aria-label="Свернуть меню">×</button>
+      </div>
+      <button class="new-chat-button" id="new-chat"><span class="plus-icon">＋</span><span>Новый диалог</span><kbd>Ctrl K</kbd></button>
+      <div class="sidebar-create-row">
+        <button class="small-create-button" id="create-folder"><span>▱</span> Папка</button>
+        <button class="small-create-button project-create" id="create-project"><span>▧</span> Проект</button>
+      </div>
+      <div class="sidebar-search"><span class="search-glyph">⌕</span><input id="chat-search" placeholder="Найти диалог" aria-label="Найти диалог"><kbd>⌕</kbd></div>
+      <div class="sidebar-label"><span>ДИАЛОГИ</span><button id="history-sort" title="Сначала новые">•••</button></div>
+      <nav class="conversation-list" id="conversation-list" aria-label="История диалогов"></nav>
+      <div class="sidebar-label project-list-heading"><span>ПРОЕКТЫ</span><button id="project-create-inline" title="Создать проект">＋</button></div>
+      <nav class="project-list" id="project-list" aria-label="Проекты"></nav>
+      <div class="sidebar-spacer"></div>
+      <div class="workspace-card">
+        <div class="workspace-icon">▧</div>
+        <div class="workspace-copy"><strong>Рабочая папка</strong><span id="workspace-label">Localis Workspace</span></div>
+        <button class="mini-icon-button" id="open-workspace" title="Открыть рабочую папку" aria-label="Открыть рабочую папку">↗</button>
+      </div>
+      <div class="sidebar-bottom">
+        <button class="sidebar-nav-button" id="memory-button"><span class="sidebar-nav-icon">✧</span><span>Общая память</span><span class="memory-count" id="memory-count">0</span></button>
+        <div class="local-note"><span class="local-indicator"></span><span>Локальные данные · зашифрованные ключи</span></div>
+        <button class="user-profile" id="settings-open">
+          <span class="avatar">L</span><span class="profile-copy"><strong>Локальный агент</strong><small>LamV1.0 · память · инструменты</small></span><span class="profile-more">⚙</span>
+        </button>
+      </div>
+    </aside>
+    <div class="panel-resizer" id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Изменить ширину боковой панели" aria-controls="sidebar" tabindex="0" title="Перетащите, чтобы изменить ширину панели"></div>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-button menu-button" id="sidebar-open" aria-label="Открыть список диалогов" title="Список диалогов">☰</button>
+          <div class="app-menu-wrap">
+            <button class="app-menu-toggle" id="app-menu-toggle" type="button" aria-label="Меню приложения" aria-haspopup="menu" aria-expanded="false" aria-controls="app-menu" title="Открыть меню приложения">
+              <span class="app-menu-symbol" aria-hidden="true">⋯</span><span class="app-menu-label">Меню</span><span class="app-menu-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <div class="app-menu" id="app-menu" role="menu" aria-label="Меню приложения" hidden>
+              <div class="app-menu-heading">РАБОЧАЯ СРЕДА</div>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="new-chat"><span class="app-menu-item-icon" aria-hidden="true">＋</span><span>Новый диалог</span><kbd>Ctrl K</kbd></button>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="create-project"><span class="app-menu-item-icon" aria-hidden="true">▧</span><span>Создать проект</span></button>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="create-folder"><span class="app-menu-item-icon" aria-hidden="true">▱</span><span>Создать папку</span></button>
+              <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="open-workspace"><span class="app-menu-item-icon" aria-hidden="true">↗</span><span>Открыть рабочую папку</span></button>
+              <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="activity"><span class="app-menu-item-icon" aria-hidden="true">◷</span><span>Панель активности</span></button>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="connectors"><span class="app-menu-item-icon" aria-hidden="true">⌘</span><span>Подключения</span></button>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="memory"><span class="app-menu-item-icon" aria-hidden="true">✧</span><span>Общая память</span></button>
+              <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
+              <button class="app-menu-item" type="button" role="menuitem" tabindex="-1" data-app-action="settings"><span class="app-menu-item-icon" aria-hidden="true">⚙</span><span>Настройки</span></button>
+            </div>
+          </div>
+          <span class="topbar-divider" role="separator" aria-orientation="vertical"></span>
+          <div class="crumb"><span>Рабочее пространство</span><span class="crumb-slash">/</span><strong id="active-title">Новый диалог</strong></div>
+        </div>
+        <div class="topbar-actions">
+          <span class="project-mode-pill" id="project-mode-pill" hidden>◧ <span id="project-mode-name"></span></span>
+          <button class="connection-pill" id="connection-pill" title="Проверить или запустить LamV1.0"><span class="connection-dot"></span><span id="connection-label">Запуск LamV1.0…</span><span class="pill-chevron">⌄</span></button>
+          <div class="model-select-wrap"><span class="model-spark">✦</span><select id="model-select" aria-label="Единственная локальная модель LamV1.0" disabled><option value="lam-v1.0">LamV1.0 · Qwen3 4B Q4_K_M</option></select><span class="select-chevron">⌄</span></div>
+          <button class="top-action arena-open" id="arena-open" title="Открыть Arena Agent Mode вручную в системном браузере"><span>↗</span><span>Arena.ai</span></button>
+          <button class="top-action activity-toggle" id="activity-toggle" title="Показать, что делает агент"><span>◷</span><span>Активность</span></button>
+          <button class="icon-button settings-icon" id="settings-open-top" title="Настройки" aria-label="Настройки">⚙</button>
+        </div>
+      </header>
+
+      <section class="conversation-stage" id="conversation-stage">
+        <div class="welcome" id="welcome-screen">
+          <div class="welcome-orbit orbit-one"></div><div class="welcome-orbit orbit-two"></div>
+          <div class="welcome-emblem"><div class="emblem-core">L</div><span class="emblem-ray ray-a"></span><span class="emblem-ray ray-b"></span><span class="emblem-ray ray-c"></span></div>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> ВАШ ЛОКАЛЬНЫЙ AI WORKSPACE</div>
+          <h1>Что будем создавать?</h1>
+          <p class="welcome-subtitle">Чаты, проекты, локальные файлы и подключённые сервисы — в одном рабочем пространстве. Выполнение инструментов видно в панели активности.</p>
+          <div class="suggestion-grid">
+            <button class="suggestion-card" data-prompt="Изучи актуальные решения для моей задачи и дай ответ со ссылками на источники."><span class="suggestion-icon violet">⌕</span><span><strong>Исследовать тему</strong><small>Поиск в интернете с источниками</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Создай адаптивный сайт в текущем проекте. Сначала составь план, затем создай файлы, запусти проверки и покажи результат."><span class="suggestion-icon blue">⌘</span><span><strong>Собрать сайт</strong><small>План · файлы · сборка · проверка</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Проанализируй CSV в рабочей папке, проверь пропуски и числовые показатели. Создай краткий отчёт с выводами."><span class="suggestion-icon mint">▤</span><span><strong>Проанализировать данные</strong><small>CSV, TSV, JSON и статистики</small></span><span class="suggestion-arrow">↗</span></button>
+            <button class="suggestion-card" data-prompt="Проверь доступные подключённые сервисы и предложи безопасный план автоматизации этой задачи."><span class="suggestion-icon amber">✦</span><span><strong>Связать сервисы</strong><small>GitHub · Google · Instagram · MCP</small></span><span class="suggestion-arrow">↗</span></button>
+          </div>
+          <div class="welcome-quick-actions"><button id="welcome-create-project" class="button-secondary">＋ Создать проект</button><button id="welcome-connectors" class="button-secondary">Подключить сервисы</button></div>
+          <div class="capability-line"><span>ЛОКАЛЬНАЯ МОДЕЛЬ</span><i></i><span>ОБЩАЯ ПАМЯТЬ</span><i></i><span>ПРОВЕРЯЕМЫЕ ДЕЙСТВИЯ</span></div>
+        </div>
+        <div class="message-list" id="message-list" aria-live="polite"></div>
+        <div class="scroll-anchor" id="scroll-anchor"></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <div class="attachment-strip" id="attachment-strip" hidden></div>
+        <div class="connector-strip" aria-label="Подключения и расширения">
+          <span class="connector-strip-label">ПОДКЛЮЧИТЬ</span>
+          <button class="connector-chip" data-settings-tab="connectors" data-connector="github"><span class="connector-github">●</span> GitHub</button>
+          <button class="connector-chip" data-settings-tab="connectors" data-connector="google"><span class="connector-google">G</span> Google</button>
+          <button class="connector-chip" data-settings-tab="connectors" data-connector="instagram"><span class="connector-instagram">◎</span> Instagram</button>
+          <button class="connector-chip" data-settings-tab="connectors" data-connector="telegram"><span class="connector-telegram">➤</span> Telegram</button>
+
+          <button class="connector-chip" id="composer-connectors"><span>＋</span> Все</button>
+          <button class="connector-chip connector-plugin-chip" id="composer-plugins"><span>✦</span> Plugins</button>
+        </div>
+        <div class="composer" id="composer">
+          <textarea id="prompt-input" rows="1" placeholder="Напишите задачу… · install github https://github.com/owner/repository" aria-label="Сообщение"></textarea>
+          <div class="composer-bottom">
+            <div class="composer-tools">
+              <button class="composer-tool" id="attach-button" title="Прикрепить изображение или текстовый файл"><span class="attach-plus">＋</span><span>Вложить</span></button>
+              <span class="composer-divider"></span>
+              <button class="composer-tool active-project-select" id="composer-project-select" title="Выбрать проект"><span>◧</span><span id="composer-project-label">Общий чат</span><span class="mini-chevron">⌄</span></button>
+              <span class="composer-divider"></span>
+              <button class="composer-tool" id="composer-agents" title="Настроить агентов"><span>◎</span><span>Агенты</span></button>
+            </div>
+            <div class="composer-right"><span class="privacy-label"><span class="privacy-lock">⌑</span> Локально по умолчанию</span><span class="enter-hint">Enter · отправить</span><button class="send-button" id="send-button" aria-label="Отправить сообщение" title="Отправить"><span class="send-arrow">↑</span></button></div>
+          </div>
+        </div>
+        <div class="composer-footnote">Ответы создаёт LamV1.0 локально; web-поиск, подключения и файловые действия подчиняются выбранным разрешениям.</div>
+      </footer>
+    </main>
+
+    <div class="panel-resizer activity-resizer" id="activity-resizer" role="separator" aria-orientation="vertical" aria-label="Изменить ширину панели активности" aria-controls="activity-sidebar" tabindex="0" title="Перетащите, чтобы изменить ширину панели активности"></div>
+    <aside class="activity-sidebar" id="activity-sidebar" aria-label="Активность Localis">
+      <div class="activity-header">
+        <div><div class="activity-kicker">LOCALIS RUNTIME</div><h2>Активность</h2></div>
+        <button class="icon-button activity-close" id="activity-close" title="Скрыть активность" aria-label="Скрыть активность">×</button>
+      </div>
+      <div class="runtime-card" id="runtime-card"><span class="runtime-indicator" id="runtime-indicator"></span><div><strong id="runtime-title">Агент ожидает задачу</strong><small id="runtime-description">Здесь появятся шаги, вызовы инструментов и ошибки.</small></div></div>
+      <div class="activity-section-title"><span>ХОД ВЫПОЛНЕНИЯ</span><button id="activity-clear" title="Очистить журнал">Очистить</button></div>
+      <div class="runtime-progress" id="runtime-progress" hidden><span class="progress-line"></span><span id="runtime-step-count">Шаг 0</span></div>
+      <div class="activity-list" id="activity-list"></div>
+      <div class="activity-empty" id="activity-empty"><div>◷</div><strong>Пока тихо</strong><span>Текущая задача, операции с файлами, коннекторы и сборка появятся здесь.</span></div>
+      <div class="activity-footer"><span class="local-indicator"></span> События сохраняются локально</div>
+    </aside>
+  </div>
+
+  <div class="modal-backdrop" id="approval-backdrop" hidden>
+    <section class="modal approval-modal" role="dialog" aria-modal="true" aria-labelledby="approval-title">
+      <div class="modal-topline"><div class="modal-icon approval-icon" id="approval-icon">!</div><button class="icon-button modal-close" id="approval-close" aria-label="Закрыть">×</button></div>
+      <div class="approval-label" id="approval-kind">ТРЕБУЕТСЯ ПОДТВЕРЖДЕНИЕ</div>
+      <h2 id="approval-title">Разрешить действие?</h2>
+      <p class="modal-description" id="approval-summary"></p>
+      <div class="approval-detail-label">ПОДРОБНОСТИ</div><pre class="approval-detail" id="approval-detail"></pre>
+      <div class="approval-warning" id="approval-warning" hidden><span>!</span><p></p></div>
+      <div class="modal-actions"><button class="button-secondary" id="approval-deny">Отклонить</button><button class="button-primary" id="approval-accept">Разрешить один раз <span>→</span></button></div>
+      <div class="approval-caption">Полный доступ можно включить в настройках с отдельным предупреждением. Установка незнакомого кода несёт риск.</div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="settings-backdrop" hidden>
+    <section class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="settings-top"><div class="settings-topline"><div class="modal-icon settings-modal-icon">⚙</div><button class="icon-button modal-close" id="settings-close" aria-label="Закрыть">×</button></div><div class="approval-label">LOCALIS DESKTOP WORKSPACE</div><h2 id="settings-title">Настройки и инструменты</h2></div>
+      <div class="settings-layout">
+        <nav class="settings-tabs" aria-label="Разделы настроек">
+          <button class="settings-tab active" data-settings-tab="general">◈ <span>Общие</span></button>
+          <button class="settings-tab" data-settings-tab="connectors">↗ <span>Коннекторы</span><b id="connected-count">0</b></button>
+          <button class="settings-tab" data-settings-tab="plugins">▤ <span>Plugins</span></button>
+          <button class="settings-tab" data-settings-tab="agents">◎ <span>Агенты</span></button>
+          <button class="settings-tab" data-settings-tab="memory">✧ <span>Память</span></button>
+        </nav>
+        <div class="settings-content">
+          <section class="settings-panel active" data-settings-panel="general">
+            <div class="panel-intro"><h3>Общие настройки</h3><p>Язык, внешний вид, права доступа и локальная среда.</p></div>
+            <div class="settings-grid">
+              <label><span class="field-label">Язык ответа агента</span><select id="setting-language"><option value="ru">Русский</option><option value="en">English</option><option value="lv">Latviešu</option></select></label>
+              <label><span class="field-label">Цветовая тема</span><select id="setting-theme"><option value="midnight">Midnight blue</option><option value="graphite">Graphite</option><option value="forest">Forest</option><option value="light">Light</option></select></label>
+            </div>
+            <div class="scale-control">
+              <label class="field-label" for="setting-ui-scale">Масштаб интерфейса <span id="ui-scale-value">100%</span></label>
+              <input id="setting-ui-scale" type="range" min="0.8" max="1.25" step="0.05" value="1" aria-label="Масштаб интерфейса">
+            </div>
+            <label class="check-row"><input type="checkbox" id="setting-reduced-motion"><span><strong>Экономия ресурсов и меньше анимаций</strong><small>Оставляет интерфейс отзывчивым во время инференса и снижает визуальные эффекты.</small></span></label>
+            <div class="field-help">Отрисовка следует частоте обновления Windows-дисплея и достигает 120 Гц/кадров в секунду, если монитор и система поддерживают 120 Гц. Localis не разгоняет частоту экрана и не держит скрытое окно активным.</div>
+            <label class="check-row"><input type="checkbox" id="self-learning-enabled"><span><strong>Локальная память опыта</strong><small>По желанию сохранять очищенные от секретов итоги диалогов и использовать подходящие заметки позже. Это retrieval-контекст, не дообучение и не изменение весов LamV1.0.</small></span></label>
+            <label class="field-label" for="approval-mode">Разрешения инструментов</label>
+            <select id="approval-mode" class="wide-select"><option value="ask">Спрашивать перед каждым действием</option><option value="full">Полный доступ · без повторных вопросов</option></select>
+            <div class="access-warning" id="full-access-warning"><strong>⚠ Полный доступ — опасный режим</strong><p>После отдельного системного подтверждения Localis сможет автоматически работать с выбранными файлами, выполнять команды с правами вашей учётной записи и обращаться к включённым подключениям/интернету. Переключатель не создаёт песочницу; использовать только если вы осознаёте риск.</p></div>
+            <label class="field-label" for="model-runtime-result">Локальная модель LamV1.0</label>
+            <div class="field-with-action"><div class="workspace-path" id="model-runtime-result">Модель входит в комплект Localis.</div><button class="button-secondary compact" id="check-model-button">Проверить / запустить</button></div>
+            <div class="field-help">Единственный локальный backend — LamV1.0 на базе открытых весов Qwen3-4B-Instruct-2507 Q4_K_M. C++-launcher подбирает профиль CPU/GPU, llama.cpp выполняет инференс. Параметры модели не обучаются; локальная память не является fine-tuning.</div>
+            <label class="field-label" for="image-provider">Локальный генератор изображений <span>необязательно</span></label>
+            <div class="settings-grid"><select id="image-provider"><option value="automatic1111">AUTOMATIC1111 / Forge API</option><option value="comfyui">ComfyUI API</option></select><input id="image-endpoint" type="url" spellcheck="false" placeholder="http://127.0.0.1:7860"></div>
+            <div class="field-help">Это отдельные локальные генераторы. Встроенная LamV1.0 сама не генерирует изображения/видео. Arena.ai можно открыть вручную; Localis не управляет сайтом скрытно.</div>
+            <label class="field-label">Рабочая папка <span>по умолчанию для чатов</span></label>
+            <div class="field-with-action"><div class="workspace-path" id="settings-workspace">…</div><button class="button-secondary compact" id="choose-workspace">Выбрать</button></div>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="connectors">
+            <div class="panel-intro"><h3>Коннекторы и интеграции</h3><p>Ключи облачных AI-моделей удалены; Localis использует только LamV1.0 локально. Из ключей, относящихся к AI-чату, здесь остаются Telegram bot token и chat ID. У GitHub, Google, Instagram и MCP свои отдельные учётные данные для соответствующих сервисов.</p></div>
+            <div id="connector-catalog" class="connector-catalog"></div>
+            <div class="connector-config-card">
+              <div class="connector-card-heading"><div><strong>GitHub</strong><small id="github-status">Не подключён</small></div><span class="connector-github">●</span></div>
+              <label class="field-label" for="github-token">Fine-grained Personal Access Token</label><input id="github-token" type="password" autocomplete="off" placeholder="github_pat_…">
+              <div class="field-help">Ограничьте токен нужными репозиториями и правами. Для чтения нужны Metadata/Contents read; для issues — Issues read/write; для коммитов — Contents read/write.</div>
+              <div class="card-actions"><button class="button-secondary compact" data-disconnect="github">Отключить</button><button class="button-primary compact" id="github-connect">Проверить и подключить</button></div>
+            </div>
+            <div class="connector-config-card">
+              <div class="connector-card-heading"><div><strong>Google Workspace</strong><small id="google-status">Не подключён</small></div><span class="connector-google">G</span></div>
+              <label class="field-label" for="google-client-id">OAuth Client ID · Desktop app</label><input id="google-client-id" autocomplete="off" placeholder="…apps.googleusercontent.com">
+              <label class="field-label" for="google-client-secret">Client secret <span>если он выдан проекту</span></label><input id="google-client-secret" type="password" autocomplete="off" placeholder="Необязательно для desktop OAuth">
+              <div class="field-help">Создайте OAuth client типа Desktop app в Google Cloud, включите Drive, Docs, Gmail и Calendar API, добавьте свой аккаунт в Test users. Запрашиваются Drive, Gmail и Calendar scopes.</div>
+              <div class="card-actions"><button class="button-secondary compact" data-disconnect="google">Отключить</button><button class="button-primary compact" id="google-connect">Открыть вход Google</button></div>
+            </div>
+            <div class="connector-config-card">
+              <div class="connector-card-heading"><div><strong>Instagram Graph API</strong><small id="instagram-status">Не подключён</small></div><span class="connector-instagram">◎</span></div>
+              <label class="field-label" for="instagram-token">Meta access token</label><input id="instagram-token" type="password" autocomplete="off" placeholder="EAAB…">
+              <label class="field-label" for="instagram-user-id">Instagram User ID</label><input id="instagram-user-id" autocomplete="off" placeholder="ID Business / Creator аккаунта">
+              <div class="field-help">Нужен профессиональный Business/Creator аккаунт, связанная Facebook Page и права Meta API. Для публикации: instagram_business_content_publish; личные аккаунты API не поддерживаются.</div>
+              <div class="card-actions"><button class="button-secondary compact" data-disconnect="instagram">Отключить</button><button class="button-primary compact" id="instagram-connect">Проверить и подключить</button></div>
+            </div>
+            <div class="connector-config-card telegram-config-card">
+              <div class="connector-card-heading"><div><strong>Telegram bot</strong><small id="telegram-status">Не подключён</small></div><span class="connector-telegram">➤</span></div>
+              <label class="field-label" for="telegram-token">Bot API token · только ваш бот</label><input id="telegram-token" type="password" autocomplete="new-password" placeholder="Получите у @BotFather">
+              <label class="field-label" for="telegram-chat-id">Chat ID или @username канала</label><input id="telegram-chat-id" autocomplete="off" placeholder="Например, -1001234567890">
+              <div class="field-help">Token хранится только в зашифрованном хранилище ОС. Бот должен быть добавлен в чат/канал; в режиме Ask перед отправкой показываются чат и полный текст, а Full access действует согласно общему предупреждению.</div>
+              <div class="card-actions"><button class="button-secondary compact" data-disconnect="telegram">Отключить</button><button class="button-primary compact" id="telegram-connect">Проверить и сохранить</button></div>
+            </div>
+            <div class="connector-config-card arena-notice">
+              <div class="connector-card-heading"><div><strong>Arena.ai Agent Mode</strong><small>Ручной переход · без сохранения Google-пароля</small></div><span class="arena-mark">A</span></div>
+              <div class="field-help">Arena.ai Terms запрещают доступ программными и автоматизированными средствами. Поэтому Localis не будет незаметно входить, загружать файлы, отправлять запросы или скачивать результаты с Arena. Открыть Agent Mode можно вручную; публичный интернет Localis читает собственными web-инструментами.</div>
+              <div class="card-actions"><button class="button-primary compact" id="arena-open-settings">Открыть Arena.ai Agent Mode</button></div>
+            </div>
+            <div class="connector-config-card mcp-config-card">
+              <div class="connector-card-heading"><div><strong>Любой MCP Streamable HTTP сервер</strong><small>Notion · Slack · Stripe · HubSpot · Hugging Face · Zapier · GitHub MCP и свой</small></div><span class="mcp-mark">M</span></div>
+              <label class="field-label" for="mcp-name">Название</label><input id="mcp-name" placeholder="Например, Notion">
+              <label class="field-label" for="mcp-url">HTTPS endpoint</label><input id="mcp-url" type="url" placeholder="https://mcp.example.com/mcp">
+              <label class="field-label" for="mcp-token">Bearer token <span>если сервер требует</span></label><input id="mcp-token" type="password" autocomplete="off" placeholder="Секрет зашифруется локально">
+              <div class="field-help">MCP-сервер получает только вызванные инструменты. В режиме подтверждений каждый tool call отдельно одобряется. OAuth MCP-серверы требуют предварительно завершённой авторизации; здесь задаётся bearer token.</div>
+              <div class="card-actions"><button class="button-primary compact" id="mcp-connect">Проверить и подключить MCP</button></div>
+            </div>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="plugins">
+            <div class="panel-intro"><h3>Plugins</h3><p>Встроенные навыки применяются в системном контексте; Data Analysis также добавляет реальный локальный анализ CSV/JSON. Импортированный plugin не запускает исполняемый код.</p></div>
+            <div class="plugin-actions"><button class="button-primary compact" id="plugin-import">＋ Импортировать skill-файл</button><div class="field-with-action"><input id="plugin-url" type="url" placeholder="https://raw.githubusercontent.com/.../SKILL.md"><button class="button-secondary compact" id="plugin-install-url">Импортировать URL</button></div><div class="field-with-action"><input id="plugin-search-query" placeholder="Найти skill или plugin в интернете"><button class="button-secondary compact" id="plugin-search">Найти</button></div></div>
+            <div class="field-help">Интернет-import принимает только небольшие публичные .md/.txt/.json файлы (до 40 КБ), не следует перенаправлениям и требует подтверждения. После загрузки проверьте текст и при необходимости отключите skill.</div>
+            <div id="plugin-search-results" class="plugin-search-results"></div>
+            <div id="plugin-list" class="plugin-list"></div>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="agents">
+            <div class="panel-intro"><h3>Локальные агенты</h3><p>Команда в чате: <code>install github https://github.com/owner/repository</code>. Localis импортирует только небольшие Markdown-инструкции из корня публичного репозитория; исходный код не клонируется и не запускается.</p></div>
+            <div class="field-with-action"><input id="agent-install-url" type="url" placeholder="https://github.com/owner/agent-skill"><button class="button-primary compact" id="agent-install-button">Установить</button></div>
+            <div class="field-help">Перед сетевым запросом в обычном режиме появится подтверждение. Установка не требует Git for Windows. Проверьте импортированный текст в настройках → Агенты до использования; skills можно выключить или удалить.</div>
+            <div id="agent-list" class="agent-list"></div>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="memory">
+            <div class="panel-intro"><h3>Общая локальная память</h3><p>Сводка обновляется после каждого завершённого запроса, общая для чатов и проектов и хранится в отдельном файле на этом компьютере.</p></div>
+            <div class="memory-file-note"><span>▤</span><div><strong>global-memory.json</strong><small>%APPDATA%\localis-ai\global-memory.json</small></div></div>
+            <pre class="shared-memory-preview" id="shared-memory-preview">Общая сводка появится после первой задачи.</pre>
+            <div class="memory-settings-row"><div><strong>Заметки и история памяти</strong><p id="memory-description">Сохранённые заметки не меняют веса модели.</p></div><button class="button-danger" id="clear-memory">Очистить заметки</button></div>
+            <div class="settings-privacy"><span>◈</span><div><strong>Локальная память, фиксированные веса</strong><p>История и заметки остаются на устройстве. Интернет-страницы загружаются только вызванными web-инструментами; их текст считается недоверенным.</p></div></div>
+          </section>
+        </div>
+      </div>
+      <div class="modal-actions settings-actions"><button class="button-secondary" id="settings-cancel">Закрыть</button><button class="button-primary" id="settings-save">Сохранить общие настройки <span>→</span></button></div>
+    </section>
+  </div>
+
+  <dialog id="agent-inspect-dialog" class="agent-inspect-dialog" aria-labelledby="agent-inspect-title">
+    <div class="agent-inspect-header">
+      <div><div class="approval-label">ИМПОРТИРОВАННЫЕ ИНСТРУКЦИИ · НЕИСПОЛНЯЕМЫЙ ТЕКСТ</div><h2 id="agent-inspect-title">GitHub skill</h2><a id="agent-inspect-source" href="#" data-external-link="1">Открыть репозиторий</a></div>
+      <button class="icon-button" id="agent-inspect-close" aria-label="Закрыть">×</button>
+    </div>
+    <div class="field-help" id="agent-inspect-files"></div>
+    <pre id="agent-inspect-content" class="agent-inspect-content"></pre>
+    <div class="modal-actions"><button class="button-secondary" id="agent-inspect-done">Закрыть</button></div>
+  </dialog>
+
+  <div class="modal-backdrop" id="create-backdrop" hidden>
+    <section class="modal create-modal" role="dialog" aria-modal="true" aria-labelledby="create-title">
+      <div class="modal-topline"><div class="modal-icon" id="create-icon">＋</div><button class="icon-button modal-close" id="create-close" aria-label="Закрыть">×</button></div>
+      <div class="approval-label" id="create-kicker">НОВАЯ СТРУКТУРА</div><h2 id="create-title">Создать проект</h2>
+      <label class="field-label" for="create-name">Название</label><input id="create-name" maxlength="100" placeholder="Например, сайт портфолио">
+      <div id="create-goal-wrap"><label class="field-label" for="create-goal">Цель проекта <span>необязательно</span></label><textarea id="create-goal" maxlength="2000" placeholder="Что создаём, для кого и что считать готовым?"></textarea></div>
+      <div class="field-help" id="create-help">Проект будет создан в рабочей папке вместе с README и автоматически включёнными инструментами и навыками.</div>
+      <div class="modal-actions"><button class="button-secondary" id="create-cancel">Отмена</button><button class="button-primary" id="create-confirm">Создать <span>→</span></button></div>
+    </section>
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="renderer.js"></script>
+</body>
+</html>

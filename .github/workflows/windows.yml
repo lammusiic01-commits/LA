@@ -1,0 +1,94 @@
+name: Windows desktop build
+
+on:
+  push:
+    branches: [main, "arena/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-and-package:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        shell: pwsh
+        run: |
+          npm test 2>&1 | Tee-Object -FilePath test-results.txt
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+            Get-Content test-results.txt | Select-String -Pattern 'not ok|AssertionError|Error:|ERR_|failed|expected|actual' | Select-Object -First 20 | ForEach-Object { Write-Output "::error title=Windows test failure::$($_.Line)" }
+            exit $testExitCode
+          }
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Localis-test-log
+          path: test-results.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Install verified Inno Setup 6.7.3
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
+          $url = 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe'
+          $expected = '9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732'
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          $algorithm = [System.Security.Cryptography.SHA256]::Create()
+          $stream = [System.IO.File]::OpenRead($installer)
+          try { $actual = [System.BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+          finally { $stream.Dispose(); $algorithm.Dispose() }
+          if ($actual -ne $expected) { throw "Inno Setup SHA-256 mismatch: $actual" }
+          $installDir = Join-Path $env:RUNNER_TEMP 'Inno Setup 6.7.3'
+          $arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CURRENTUSER /DIR=`"$installDir`""
+          $process = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Inno Setup installation failed with exit code $($process.ExitCode)." }
+          $candidates = @(
+            (Join-Path $installDir 'ISCC.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs/Inno Setup 6/ISCC.exe')
+          )
+          $compiler = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $compiler -and (Test-Path -LiteralPath $env:RUNNER_TEMP)) {
+            $compiler = Get-ChildItem -LiteralPath $env:RUNNER_TEMP -Filter 'ISCC.exe' -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $compiler) { throw 'Pinned Inno Setup compiler was not installed in the runner temporary directory.' }
+          Write-Host "Using pinned Inno Setup compiler: $compiler"
+          "ISCC_PATH=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          'ISCC_VERSION=6.7.3' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          npm run dist:win 2>&1 | Tee-Object -FilePath build-results.txt
+          $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -ne 0) {
+            $details = (Get-Content build-results.txt | Select-Object -Last 35) -join ' | '
+            Write-Output "::error title=Windows packaging failure::$details"
+            exit $buildExitCode
+          }
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Localis-build-log
+          path: build-results.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: Localis-Windows
+          path: |
+            release/Localis-Setup-*.exe
+            release/Localis-Setup-*.exe.sha256
+          if-no-files-found: error
+          retention-days: 14
